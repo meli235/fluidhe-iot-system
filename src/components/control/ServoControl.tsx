@@ -1,0 +1,53 @@
+'use client';
+
+import React from 'react';
+
+interface ServoControlProps {
+  servoAngle: number;
+  controlMode: 'AUTO' | 'MANUAL';
+  emergencyStopped?: boolean;
+  onChangeServoAngle: (angle: number) => void;
+}
+
+export const ServoControl: React.FC<ServoControlProps> = ({
+  servoAngle,
+  controlMode,
+  emergencyStopped = false,
+  onChangeServoAngle
+}) => {
+  const isAuto = controlMode === 'AUTO';
+
+  return (
+    <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 transition-all space-y-2">
+      <div className="flex justify-between items-center text-xs font-bold text-slate-800">
+        <span className="flex items-center gap-1.5">
+          Sudut Bukaan Katup Servo
+          {isAuto && (
+            <span className="text-[9px] text-sky-700 font-extrabold bg-sky-100 px-1.5 py-0.5 rounded border border-sky-200">
+              AUTO PID
+            </span>
+          )}
+        </span>
+        <strong className="text-slate-900 font-extrabold text-base">{servoAngle}°</strong>
+      </div>
+      <input
+        type="range"
+        min="0"
+        max="180"
+        value={servoAngle}
+        onChange={(e) => onChangeServoAngle(Number(e.target.value))}
+        disabled={emergencyStopped || isAuto}
+        className={`w-full h-2 bg-slate-200 rounded-lg appearance-none accent-sky-600 ${
+          isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+        }`}
+      />
+      <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+        <span>0° (Tutup)</span>
+        <span>90° (Setengah)</span>
+        <span>180° (Buka Penuh)</span>
+      </div>
+    </div>
+  );
+};
+
+export default ServoControl;

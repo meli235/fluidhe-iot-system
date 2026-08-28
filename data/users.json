@@ -1,0 +1,49 @@
+{
+  "users": [
+    {
+      "id": "USR-01",
+      "name": "Admin",
+      "email": "anugrahtriplecycle@gmail.com",
+      "role": "admin",
+      "status": "Active",
+      "lastLogin": "2026-08-28T08:24:05.467Z",
+      "isScheduleRestricted": true,
+      "allowedStartDate": "2026-08-26",
+      "allowedEndDate": "2026-08-26",
+      "allowedDays": [
+        "Senin",
+        "Selasa",
+        "Rabu",
+        "Kamis",
+        "Jumat"
+      ],
+      "allowedStartTime": "07:00",
+      "allowedEndTime": "18:00",
+      "lastSeen": 1787906236145
+    },
+    {
+      "id": "USR-02",
+      "name": "caca",
+      "email": "dwimeliantiistiqomah55@gmail.com",
+      "role": "operator",
+      "status": "Active",
+      "lastLogin": "2026-08-28T05:25:22.667Z",
+      "isScheduleRestricted": true,
+      "allowedStartDate": "2026-08-26",
+      "allowedEndDate": "2026-08-27",
+      "allowedDays": [
+        "Minggu",
+        "Kamis",
+        "Jumat"
+      ],
+      "allowedStartTime": "07:00",
+      "allowedEndTime": "18:00",
+      "lastSeen": 0
+    }
+  ],
+  "passwords": {
+    "dwimeliantiistiqomah55@gmail.com": "GVwbSTbs",
+    "admin@uad.ac.id": "admin123",
+    "anugrahtriplecycle@gmail.com": "gsxjGzxe"
+  }
+}
