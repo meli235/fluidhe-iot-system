@@ -123,6 +123,7 @@ export default function FluidHEDashboard() {
   // ─── SUPABASE INTEGRATION HOOK (REALTIME MONITORING & BIDIRECTIONAL CONTROL) ───
   const {
     connectionStatus: supabaseStatus,
+    isHardwareOnline,
     errorMessage: supabaseError,
     currentAnonKey,
     saveAnonKey,
@@ -277,6 +278,7 @@ export default function FluidHEDashboard() {
   const [operatorSessionLimit, setOperatorSessionLimit] = useState<number>(30); // minutes
   const [operatorSessionRemaining, setOperatorSessionRemaining] = useState<number>(1800); // seconds
   const [sessionExpiredModal, setSessionExpiredModal] = useState<boolean>(false);
+  const [scheduleRestrictionNotice, setScheduleRestrictionNotice] = useState<string | null>(null);
 
   // ─── CONTROL STATES ───
   const [heaterMasterPower, setHeaterMasterPower] = useState<boolean>(true);
@@ -360,6 +362,8 @@ export default function FluidHEDashboard() {
   const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [otpResendCountdown, setOtpResendCountdown] = useState<number>(0);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [otpTimeLeft, setOtpTimeLeft] = useState<number>(0);
   const [isSendingEmail, setIsSendingEmail] = useState<boolean>(false);
   const [smtpStatusInfo, setSmtpStatusInfo] = useState<string | null>(null);
 
@@ -436,8 +440,7 @@ export default function FluidHEDashboard() {
       if (freshUser) {
         const check = validateScheduleAccess(freshUser);
         if (!check.allowed) {
-          alert(`Akses ditutup oleh Administrator: ${check.reason}`);
-          handleLogout();
+          setScheduleRestrictionNotice(check.reason || 'Masa izin praktikum Anda telah berakhir.');
         }
       }
     }, 3000);
@@ -483,17 +486,19 @@ export default function FluidHEDashboard() {
 
   const [isAddingUser, setIsAddingUser] = useState<boolean>(false);
   const [addUserSuccessMsg, setAddUserSuccessMsg] = useState<string | null>(null);
+  const [addUserError, setAddUserError] = useState<string | null>(null);
   const [lastCreatedUserCredentials, setLastCreatedUserCredentials] = useState<{ email: string; name: string; password: string; role: string } | null>(null);
 
   // Handler for Admin adding a new user (generates random password and dispatches email)
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAddUserError(null);
     if (!newUserName.trim() || !newUserEmail.trim()) return;
 
     const email = newUserEmail.toLowerCase().trim();
 
     if (usersList.some(u => u.email.toLowerCase() === email)) {
-      alert(`User dengan email ${email} sudah terdaftar di sistem!`);
+      setAddUserError(`Email ${email} sudah terdaftar di sistem!`);
       return;
     }
 
@@ -605,18 +610,18 @@ export default function FluidHEDashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Email kredensial dan kata sandi berhasil dikirim ke: ${email}`);
+        triggerCctvToast(`Email kredensial berhasil dikirim ke: ${email}`, 'success');
       } else {
-        alert(`Gagal mengirim email: ${data.message || 'Error tidak diketahui'}`);
+        triggerCctvToast(`Gagal mengirim email: ${data.message || 'Error tidak diketahui'}`, 'warning');
       }
     } catch (err) {
-      alert(`Terjadi kesalahan saat mengirim email: ${err}`);
+      triggerCctvToast(`Terjadi kesalahan pengiriman email: ${err}`, 'warning');
     } finally {
       setResendingEmailFor(null);
     }
   };
 
-  // OTP Countdown timer
+  // OTP Resend Countdown timer
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (otpResendCountdown > 0) {
@@ -624,6 +629,23 @@ export default function FluidHEDashboard() {
     }
     return () => clearTimeout(timer);
   }, [otpResendCountdown]);
+
+  // Real-time OTP Expiration Countdown (Strict 5 minutes limit)
+  useEffect(() => {
+    if (resetStep !== 'VERIFY_OTP' || !otpExpiresAt) return;
+
+    const checkExpiration = () => {
+      const remainingSec = Math.max(0, Math.floor((otpExpiresAt - Date.now()) / 1000));
+      setOtpTimeLeft(remainingSec);
+      if (remainingSec === 0) {
+        setResetError('Kode OTP telah kedaluwarsa (lebih dari 5 menit). Silakan klik "Kirim Ulang OTP" untuk mendapatkan kode baru.');
+      }
+    };
+
+    checkExpiration();
+    const interval = setInterval(checkExpiration, 1000);
+    return () => clearInterval(interval);
+  }, [resetStep, otpExpiresAt]);
 
   // ─── REAL CCTV & IP CAMERA STATES (EZVIZ C6N FULL INTEGRATION) ───
   const [selectedCamera, setSelectedCamera] = useState<'cam1' | 'cam2' | 'cam3'>('cam1');
@@ -1091,9 +1113,12 @@ export default function FluidHEDashboard() {
       return;
     }
 
-    // Generate 6-Digit OTP Code
+    // Generate 6-Digit OTP Code (Strict 5-minute validity)
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 5 * 60 * 1000;
     setGeneratedOtp(code);
+    setOtpExpiresAt(expiresAt);
+    setOtpTimeLeft(300);
     setEnteredOtp('');
     setOtpResendCountdown(60);
 
@@ -1576,6 +1601,13 @@ export default function FluidHEDashboard() {
     if (e) e.preventDefault();
     setResetError(null);
 
+    // 1. Validasi Batas Waktu OTP (Maksimal 5 Menit)
+    if (!otpExpiresAt || Date.now() > otpExpiresAt) {
+      setResetError('Kode OTP telah kedaluwarsa (lebih dari 5 menit). Silakan klik "Kirim Ulang OTP" untuk mendapatkan kode baru.');
+      setGeneratedOtp('');
+      return;
+    }
+
     if (!enteredOtp || enteredOtp.trim().length !== 6) {
       setResetError('Silakan masukkan 6 digit kode OTP yang telah dikirim ke email Anda.');
       return;
@@ -1750,9 +1782,31 @@ export default function FluidHEDashboard() {
 
     const found = activeUsers.find(u => u.email.toLowerCase() === email) || usersList.find(u => u.email.toLowerCase() === email);
 
-    const defaultFallback = (email === 'admin@uad.ac.id' || (found && found.role === 'admin'))
+    // 1. Account existence validation
+    if (!found && email !== 'admin@uad.ac.id' && email !== 'operator@uad.ac.id' && email !== 'anugrahtriplecycle@gmail.com') {
+      setLoginError('Akun dengan email / username ini belum terdaftar di sistem. Silakan hubungi Administrator Lab.');
+      return;
+    }
+
+    const actualRole: UserRole = found
+      ? found.role
+      : (email === 'admin@uad.ac.id' || email === 'anugrahtriplecycle@gmail.com')
+        ? 'admin'
+        : 'operator';
+
+    // 2. Strict Role-Tab Matching Check (Prevent Operator from logging in via Admin tab and vice-versa)
+    if (selectedDemoRole !== actualRole) {
+      if (actualRole === 'operator') {
+        setLoginError('Akun ini terdaftar sebagai OPERATOR (Mahasiswa). Silakan klik tab "Operator" di atas untuk masuk.');
+      } else {
+        setLoginError('Akun ini terdaftar sebagai ADMIN (Dosen/KaLab). Silakan klik tab "Admin" di atas untuk masuk.');
+      }
+      return;
+    }
+
+    const defaultFallback = (email === 'admin@uad.ac.id' || actualRole === 'admin')
       ? 'admin123'
-      : (email === 'operator@uad.ac.id' || (found && found.role === 'operator'))
+      : (email === 'operator@uad.ac.id' || actualRole === 'operator')
         ? 'operator123'
         : 'dev123';
 
@@ -1804,7 +1858,7 @@ export default function FluidHEDashboard() {
       if (found.role === 'operator') {
         setOperatorSessionRemaining(operatorSessionLimit * 60);
       }
-    } else if (selectedDemoRole === 'admin' || email === 'admin@uad.ac.id' || email === 'anugrahtriplecycle@gmail.com') {
+    } else if (actualRole === 'admin') {
       setCurrentUser({
         name: 'Admin Lab (Anugrah)',
         email: email,
@@ -1948,7 +2002,6 @@ export default function FluidHEDashboard() {
       triggerCctvToast('File Excel tersimpan di Cloud Storage', 'success');
 
       // 3. Berhasil!
-      alert(`File tersimpan di Cloud: ${result.url}`);
       if (result.url) {
         window.open(result.url, '_blank');
       }
@@ -1956,7 +2009,6 @@ export default function FluidHEDashboard() {
     } catch (err: any) {
       console.error('Excel upload error:', err);
       triggerCctvToast('Gagal upload: ' + (err?.message || 'Error'), 'warning');
-      alert(`Gagal upload: ${err.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -2042,6 +2094,7 @@ export default function FluidHEDashboard() {
         setResetError={setResetError}
         isSendingEmail={isSendingEmail}
         otpResendCountdown={otpResendCountdown}
+        otpTimeLeft={otpTimeLeft}
         smtpStatusInfo={smtpStatusInfo}
         handleRequestOtp={handleRequestOtp}
         handleVerifyOtp={handleVerifyOtp}
@@ -2131,6 +2184,37 @@ export default function FluidHEDashboard() {
         </div>
       )}
 
+      {/* ─── OPERATOR SCHEDULE EXPIRED / ACCESS RESTRICTED MODAL ─── */}
+      {scheduleRestrictionNotice && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="asklepios-card max-w-md w-full p-6 sm:p-7 bg-white rounded-3xl shadow-2xl border-2 border-rose-500 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="p-4 bg-rose-100 text-rose-600 rounded-full w-16 h-16 mx-auto flex items-center justify-center animate-bounce shadow-inner">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-xl font-black text-slate-900">Akses Ditutup Administrator</h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                {scheduleRestrictionNotice}
+              </p>
+            </div>
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 flex items-center gap-2 text-left">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Silakan hubungi <strong>Dosen / Kepala Laboratorium (Admin)</strong> untuk pembaruan jadwal praktikum.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setScheduleRestrictionNotice(null);
+                handleLogout();
+              }}
+              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition cursor-pointer"
+            >
+              Kembali ke Halaman Login
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ─── ADD USER MODAL ─── */}
       {showAddUserModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2158,13 +2242,13 @@ export default function FluidHEDashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Email UAD</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Email Pengguna</label>
                 <input
                   type="email"
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                  placeholder="hendra@uad.ac.id"
+                  placeholder="hendra@email.com"
                   required
                 />
               </div>
@@ -2295,23 +2379,53 @@ export default function FluidHEDashboard() {
             <span className="hidden sm:inline">Panduan</span>
           </button>
 
-          {/* Supabase Connection Status Badge */}
-          <div id="tour-iot-badge" className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold border transition whitespace-nowrap ${supabaseStatus === 'ONLINE'
-            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            : supabaseStatus === 'CONNECTING'
-              ? 'bg-amber-50 text-amber-800 border-amber-200'
-              : 'bg-red-50 text-red-800 border-red-200'
-            }`}>
-            <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${supabaseStatus === 'ONLINE'
-              ? 'bg-emerald-500 animate-pulse'
-              : supabaseStatus === 'CONNECTING'
-                ? 'bg-amber-500 animate-ping'
-                : 'bg-red-500'
-              }`} />
+          {/* Supabase & ESP32 Hardware Connection Status Badge */}
+          <div
+            id="tour-iot-badge"
+            title={
+              supabaseStatus === 'ONLINE'
+                ? isHardwareOnline
+                  ? 'Hardware ESP32 aktif mengirimkan telemetri secara real-time.'
+                  : 'Koneksi Cloud Supabase Siap, menunggu pengiriman data dari alat ESP32.'
+                : 'Koneksi ke Supabase Cloud belum terhubung.'
+            }
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold border transition whitespace-nowrap ${
+              supabaseStatus === 'ONLINE'
+                ? isHardwareOnline
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                : supabaseStatus === 'CONNECTING'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-red-50 text-red-800 border-red-200'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${
+                supabaseStatus === 'ONLINE'
+                  ? isHardwareOnline
+                    ? 'bg-emerald-500 animate-pulse'
+                    : 'bg-amber-500'
+                  : supabaseStatus === 'CONNECTING'
+                  ? 'bg-amber-500 animate-ping'
+                  : 'bg-red-500'
+              }`}
+            />
             <span>
-              <span className="hidden sm:inline">IoT Cloud: </span>
-              <span className="sm:hidden">{supabaseStatus === 'ONLINE' ? 'ONLINE' : supabaseStatus === 'CONNECTING' ? 'CONNECT' : 'OFFLINE'}</span>
-              <span className="hidden sm:inline">{supabaseStatus === 'ONLINE' ? 'ONLINE' : supabaseStatus === 'CONNECTING' ? 'CONNECTING...' : 'OFFLINE'}</span>
+              {supabaseStatus === 'ONLINE' ? (
+                isHardwareOnline ? (
+                  <>
+                    <span className="hidden sm:inline">ESP32: </span>ONLINE
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">ESP32: </span>OFFLINE
+                  </>
+                )
+              ) : supabaseStatus === 'CONNECTING' ? (
+                'CONNECTING...'
+              ) : (
+                'CLOUD OFFLINE'
+              )}
             </span>
           </div>
 
@@ -2661,10 +2775,12 @@ export default function FluidHEDashboard() {
                     <span className={`w-2 h-2 rounded-full shrink-0 ${syncFeedback.active && syncFeedback.type === 'syncing'
                       ? 'bg-sky-500 animate-ping'
                       : supabaseStatus === 'ONLINE'
-                        ? 'bg-emerald-500 animate-pulse'
+                        ? isHardwareOnline
+                          ? 'bg-emerald-500 animate-pulse'
+                          : 'bg-amber-500'
                         : 'bg-red-500'
                       }`} />
-                    <span>Status: <strong>{supabaseStatus === 'ONLINE' ? 'ONLINE' : supabaseStatus}</strong></span>
+                    <span>Status: <strong>{supabaseStatus === 'ONLINE' ? (isHardwareOnline ? 'ONLINE' : 'STANDBY (OFFLINE)') : supabaseStatus}</strong></span>
                   </div>
                 </div>
 
@@ -2783,10 +2899,9 @@ export default function FluidHEDashboard() {
                       onChangeTargetTemp={(val) => {
                         setTc1Setpoint(val);
                         handleTargetTempChange(val);
-                        if (supabaseControls.control_mode === 'AUTO') {
-                          applyAutoControl(val);
-                        }
-                        triggerSyncFeedback('Target Suhu', `${val.toFixed(1)}°C`);
+                        const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
+                        const step = stepNames[val] || 'P1';
+                        triggerSyncFeedback('Level Pemanas', `Level ${step}`);
                       }}
                       onStepUp={() => {
                         const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
@@ -2794,10 +2909,9 @@ export default function FluidHEDashboard() {
                         setTc1Setpoint(nextTemp);
                         handleTargetTempChange(nextTemp);
                         handleStepButtonPress('btn_up');
-                        if (supabaseControls.control_mode === 'AUTO') {
-                          applyAutoControl(nextTemp);
-                        }
-                        triggerSyncFeedback('Tombol NAIK Suhu (+10°C)', `${nextTemp}°C`);
+                        const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
+                        const step = stepNames[nextTemp] || 'P1';
+                        triggerSyncFeedback('Naikkan Level (P+)', `Level ${step}`);
                       }}
                       onStepDown={() => {
                         const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
@@ -2805,10 +2919,9 @@ export default function FluidHEDashboard() {
                         setTc1Setpoint(nextTemp);
                         handleTargetTempChange(nextTemp);
                         handleStepButtonPress('btn_down');
-                        if (supabaseControls.control_mode === 'AUTO') {
-                          applyAutoControl(nextTemp);
-                        }
-                        triggerSyncFeedback('Tombol TURUN Suhu (-10°C)', `${nextTemp}°C`);
+                        const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
+                        const step = stepNames[nextTemp] || 'P1';
+                        triggerSyncFeedback('Turunkan Level (P-)', `Level ${step}`);
                       }}
                     />
 
@@ -2939,8 +3052,14 @@ export default function FluidHEDashboard() {
                         <button
                           type="button"
                           onClick={() => {
+                            const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
+                            const nextTemp = Math.min(90, Math.round(current / 10) * 10 + 10);
+                            setTc1Setpoint(nextTemp);
+                            handleTargetTempChange(nextTemp);
                             handleMomentaryButtonPress('btn_up');
-                            triggerSyncFeedback('Servo Button UP', 'PULSE 1.5s TRIGGERED');
+                            const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
+                            const step = stepNames[nextTemp] || 'P1';
+                            triggerSyncFeedback('Tombol UP (P+)', `Level ${step}`);
                           }}
                           disabled={emergencyStopped || activeMomentaryButtons.btn_up}
                           className={`py-3 px-4 rounded-xl text-xs font-extrabold transition flex flex-col items-center justify-center gap-1 shadow-xs active:scale-95 cursor-pointer ${
@@ -2981,8 +3100,14 @@ export default function FluidHEDashboard() {
                         <button
                           type="button"
                           onClick={() => {
+                            const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
+                            const nextTemp = Math.max(30, Math.round(current / 10) * 10 - 10);
+                            setTc1Setpoint(nextTemp);
+                            handleTargetTempChange(nextTemp);
                             handleMomentaryButtonPress('btn_down');
-                            triggerSyncFeedback('Servo Button DOWN', 'PULSE 1.5s TRIGGERED');
+                            const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
+                            const step = stepNames[nextTemp] || 'P1';
+                            triggerSyncFeedback('Tombol DOWN (P-)', `Level ${step}`);
                           }}
                           disabled={emergencyStopped || activeMomentaryButtons.btn_down}
                           className={`py-3 px-4 rounded-xl text-xs font-extrabold transition flex flex-col items-center justify-center gap-1 shadow-xs active:scale-95 cursor-pointer ${
@@ -3180,7 +3305,7 @@ export default function FluidHEDashboard() {
             {resetStep === 'INPUT_EMAIL' && (
               <form onSubmit={handleRequestOtp} className="space-y-3.5">
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Masukkan alamat email resmi akun Anda (Mahasiswa / Dosen / Admin). Sistem akan mengirimkan kode 6-digit OTP untuk memastikan hanya pemilik akun yang sah yang dapat mengganti kata sandi.
+                  Masukkan email terdaftar akun Anda untuk menerima kode verifikasi OTP.
                 </p>
 
                 <div>
@@ -3191,16 +3316,11 @@ export default function FluidHEDashboard() {
                       required
                       value={resetEmailInput}
                       onChange={(e) => setResetEmailInput(e.target.value)}
-                      placeholder="nama@uad.ac.id / email@domain.com"
+                      placeholder="nama@webmail.uad.ac.id"
                       className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-800"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   </div>
-                </div>
-
-                <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-[10.5px] text-sky-800 flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                  <span>Kata sandi Anda terenkripsi secara aman & privat (Admin tidak dapat melihat sandi baru Anda).</span>
                 </div>
 
                 <button
@@ -3226,9 +3346,24 @@ export default function FluidHEDashboard() {
               <form onSubmit={handleVerifyOtp} className="space-y-3.5">
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 leading-relaxed flex items-start gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
+                  <div className="w-full">
                     <span>Kode verifikasi 6-digit telah dikirim ke: <strong>{resetEmailInput}</strong>.</span>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">Buka email Anda (cek kotak masuk / spam), lalu ketikkan 6 digit kode yang Anda terima di bawah ini.</p>
+                    <p className="text-[11px] text-emerald-700 mt-0.5">Buka email Anda, lalu masukkan 6-digit kode OTP.</p>
+                    
+                    <div className="mt-2 pt-2 border-t border-emerald-200/70 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-600 flex items-center gap-1 font-medium">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" /> Batas Waktu OTP:
+                      </span>
+                      {otpTimeLeft > 0 ? (
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                          ⏱ {Math.floor(otpTimeLeft / 60)}:{(otpTimeLeft % 60).toString().padStart(2, '0')}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-300">
+                          ⚠️ Kedaluwarsa (&gt;5 mnt)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -3636,9 +3771,9 @@ export default function FluidHEDashboard() {
                 type="button"
                 onClick={() => {
                   navigator.clipboard?.writeText('https://drive.google.com/drive/folders/1f9bPwAzlAIIZa1EHQqm588U-bsiWh5hv?usp=sharing');
-                  alert('Link repositori Google Drive berhasil disalin ke clipboard!');
+                  triggerCctvToast('Link repositori Google Drive berhasil disalin ke clipboard!', 'success');
                 }}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
               >
                 <ExternalLink className="w-3.5 h-3.5" /> Salin Link Drive
               </button>

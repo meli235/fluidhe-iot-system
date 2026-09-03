@@ -6,10 +6,10 @@
       "email": "anugrahtriplecycle@gmail.com",
       "role": "admin",
       "status": "Active",
-      "lastLogin": "2026-08-28T08:24:05.467Z",
-      "isScheduleRestricted": true,
+      "lastLogin": "2026-09-03T04:32:22.683Z",
+      "isScheduleRestricted": false,
       "allowedStartDate": "2026-08-26",
-      "allowedEndDate": "2026-08-26",
+      "allowedEndDate": "2026-08-31",
       "allowedDays": [
         "Senin",
         "Selasa",
@@ -19,7 +19,7 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1787906236145
+      "lastSeen": 1788410017783
     },
     {
       "id": "USR-02",
@@ -27,7 +27,7 @@
       "email": "dwimeliantiistiqomah55@gmail.com",
       "role": "operator",
       "status": "Active",
-      "lastLogin": "2026-08-28T05:25:22.667Z",
+      "lastLogin": "2026-08-31T09:01:56.252Z",
       "isScheduleRestricted": true,
       "allowedStartDate": "2026-08-26",
       "allowedEndDate": "2026-08-27",

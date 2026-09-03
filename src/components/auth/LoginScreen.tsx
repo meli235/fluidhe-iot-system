@@ -16,7 +16,9 @@ import {
   Send,
   CheckCircle2,
   Check,
-  X
+  X,
+  Clock,
+  ArrowLeft
 } from 'lucide-react';
 import { UserRole } from '@/types';
 
@@ -52,6 +54,7 @@ export interface LoginScreenProps {
   setResetError: (err: string | null) => void;
   isSendingEmail: boolean;
   otpResendCountdown: number;
+  otpTimeLeft?: number;
   smtpStatusInfo: string | null;
   handleRequestOtp: (e: React.FormEvent) => void;
   handleVerifyOtp: (e: React.FormEvent) => void;
@@ -96,6 +99,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   setResetError,
   isSendingEmail,
   otpResendCountdown,
+  otpTimeLeft = 0,
   smtpStatusInfo,
   handleRequestOtp,
   handleVerifyOtp,
@@ -120,18 +124,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1 sm:line-clamp-none">Universitas Ahmad Dahlan - Dual Heater & Solenoid Control</p>
             </div>
           </div>
-
-          {/* Mobile-only status badge */}
-          <div className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-slate-200/80 shadow-sm text-[10px] font-bold text-slate-600 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span>ONLINE</span>
-          </div>
-        </div>
-
-        {/* Desktop & Tablet status badge */}
-        <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-slate-200/80 shadow-sm text-xs font-medium text-slate-600 shrink-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <span>Connected to UAD Campus Intranet</span>
         </div>
       </header>
 
@@ -258,7 +250,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <span>
                 Role <strong className="uppercase font-bold">{selectedDemoRole}</strong>:{' '}
                 {selectedDemoRole === 'admin'
-                  ? 'Akses penuh kendali hardware, verifikasi alarm & ganti kata sandi via email resmi.'
+                  ? 'Akses penuh kendali hardware, verifikasi alarm & pemantauan CCTV.'
                   : 'Pengoperasian praktikum mahasiswa, pemantauan sensor real-time & unduh data Excel.'}
               </span>
             </div>
@@ -334,7 +326,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             {resetStep === 'INPUT_EMAIL' && (
               <form onSubmit={handleRequestOtp} className="space-y-3.5">
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Masukkan alamat email resmi akun Anda (Mahasiswa / Dosen / Admin). Sistem akan mengirimkan kode 6-digit OTP untuk memastikan hanya pemilik akun yang sah yang dapat mengganti kata sandi.
+                  Masukkan email terdaftar akun Anda untuk menerima kode verifikasi OTP.
                 </p>
 
                 <div>
@@ -345,16 +337,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       required
                       value={resetEmailInput}
                       onChange={(e) => setResetEmailInput(e.target.value)}
-                      placeholder="nama@uad.ac.id / email@domain.com"
+                      placeholder="nama@webmail.uad.ac.id"
                       className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-800"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   </div>
-                </div>
-
-                <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-[10.5px] text-sky-800 flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                  <span>Kata sandi Anda terenkripsi secara aman & privat (Admin tidak dapat melihat sandi baru Anda).</span>
                 </div>
 
                 <button
@@ -380,9 +367,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <form onSubmit={handleVerifyOtp} className="space-y-3.5">
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 leading-relaxed flex items-start gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
+                  <div className="w-full">
                     <span>Kode verifikasi 6-digit telah dikirim ke: <strong>{resetEmailInput}</strong>.</span>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">Buka email Anda (cek kotak masuk / spam), lalu ketikkan 6 digit kode yang Anda terima di bawah ini.</p>
+                    <p className="text-[11px] text-emerald-700 mt-0.5">Buka email Anda, lalu masukkan 6-digit kode OTP.</p>
+                    
+                    <div className="mt-2 pt-2 border-t border-emerald-200/70 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-600 flex items-center gap-1 font-medium">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" /> Batas Waktu OTP:
+                      </span>
+                      {otpTimeLeft > 0 ? (
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                          ⏱ {Math.floor(otpTimeLeft / 60)}:{(otpTimeLeft % 60).toString().padStart(2, '0')}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-300">
+                          ⚠️ Kedaluwarsa (&gt;5 mnt)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 

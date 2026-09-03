@@ -88,6 +88,8 @@ export const UserManager: React.FC<UserManagerProps> = ({
   const [editEndDate, setEditEndDate] = React.useState<string>('');
   const [editStartTime, setEditStartTime] = React.useState<string>('07:00');
   const [editEndTime, setEditEndTime] = React.useState<string>('18:00');
+  const [copiedPassword, setCopiedPassword] = React.useState<boolean>(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = React.useState<boolean>(false);
   return (
     <div className="space-y-6">
@@ -143,11 +145,11 @@ export const UserManager: React.FC<UserManagerProps> = ({
             <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200">
               <th className="p-3">ID User</th>
               <th className="p-3">Nama Pengguna</th>
-              <th className="p-3">Email UAD</th>
+              <th className="p-3">Email Pengguna</th>
               <th className="p-3">Role / Hak Akses</th>
               <th className="p-3">Jadwal & Tanggal Akses Login</th>
               <th className="p-3">Login Terakhir</th>
-              <th className="p-3">Aksi (Kontrol Admin)</th>
+              <th className="p-3 text-center">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
@@ -197,15 +199,19 @@ export const UserManager: React.FC<UserManagerProps> = ({
                     )}
                   </td>
                   <td className="p-3 text-slate-500">{formatLastLogin(u.lastLogin)}</td>
-                <td className="p-3">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      onClick={() => onOpenResetPasswordModal(u.email)}
-                      className="p-1 text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                      title="Reset / Ganti Kata Sandi (Verifikasi OTP)"
-                    >
-                      <Key className="w-3.5 h-3.5" />
-                    </button>
+                <td className="p-3 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    {u.role !== 'operator' ? (
+                      <button
+                        onClick={() => onOpenResetPasswordModal(u.email)}
+                        className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
+                        title="Reset / Ganti Kata Sandi (Verifikasi OTP)"
+                      >
+                        <Key className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <div className="w-7 h-7 shrink-0 pointer-events-none" />
+                    )}
                     <button
                       onClick={() => {
                         const today = new Date().toISOString().slice(0, 10);
@@ -218,14 +224,14 @@ export const UserManager: React.FC<UserManagerProps> = ({
                         setEditStartTime(u.allowedStartTime || '07:00');
                         setEditEndTime(u.allowedEndTime || '18:00');
                       }}
-                      className="p-1 text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
                       title="Edit Pengguna & Jadwal Akses"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setUserToDelete(u)}
-                      className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
                       title="Hapus User"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -342,11 +348,12 @@ export const UserManager: React.FC<UserManagerProps> = ({
                       type="button"
                       onClick={() => {
                         navigator.clipboard.writeText(lastCreatedUserCredentials.password);
-                        alert('Kata sandi berhasil disalin ke clipboard!');
+                        setCopiedPassword(true);
+                        setTimeout(() => setCopiedPassword(false), 2500);
                       }}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg font-sans transition"
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg font-sans transition flex items-center gap-1"
                     >
-                      Salin Sandi
+                      {copiedPassword ? '✓ Tersalin' : 'Salin Sandi'}
                     </button>
                   </div>
                 </div>
@@ -383,7 +390,7 @@ export const UserManager: React.FC<UserManagerProps> = ({
                       required
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
-                      placeholder="user@uad.ac.id"
+                      placeholder="user@email.com"
                       className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-800"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -508,13 +515,20 @@ export const UserManager: React.FC<UserManagerProps> = ({
                   setUserToEdit(null);
                 } catch (err) {
                   console.error('Failed to update user', err);
-                  alert('Gagal menyimpan perubahan');
+                  setEditError('Gagal menyimpan perubahan ke server.');
                 } finally {
                   setIsSavingEdit(false);
                 }
               }}
               className="space-y-4"
             >
+              {editError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap Pengguna</label>
                 <input

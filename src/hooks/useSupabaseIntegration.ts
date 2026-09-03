@@ -20,6 +20,8 @@ import {
  */
 export function useSupabaseIntegration() {
   const [connectionStatus, setConnectionStatus] = useState<SupabaseConnectionStatus>('CONNECTING');
+  const [isHardwareOnline, setIsHardwareOnline] = useState<boolean>(false);
+  const [lastHardwareHeartbeat, setLastHardwareHeartbeat] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentAnonKey, setCurrentAnonKey] = useState<string>('');
   const [latestTelemetry, setLatestTelemetry] = useState<TelemetryRow | null>(null);
@@ -122,9 +124,19 @@ export function useSupabaseIntegration() {
       fetchLatestTelemetry(20).then(({ data, error }) => {
         if (!error && data && data.length > 0) {
           setTelemetryStream(data);
-          setLatestTelemetry(data[data.length - 1]);
+          const latest = data[data.length - 1];
+          setLatestTelemetry(latest);
           setConnectionStatus('ONLINE');
           setErrorMessage(null);
+
+          // Check if latest telemetry row was produced recently (< 15 seconds)
+          if (latest.created_at) {
+            const rowTime = new Date(latest.created_at).getTime();
+            if (!isNaN(rowTime) && (Date.now() - rowTime < 15000)) {
+              setLastHardwareHeartbeat(Date.now());
+              setIsHardwareOnline(true);
+            }
+          }
         }
       });
 
@@ -138,6 +150,15 @@ export function useSupabaseIntegration() {
             uap_auto_status: prev.uap_auto_status ?? false,
             uap_interval_min: prev.uap_interval_min ?? 10,
           }));
+
+          // Check if updated_at is within last 15 seconds
+          if ((data as any).updated_at) {
+            const updateTime = new Date((data as any).updated_at).getTime();
+            if (!isNaN(updateTime) && (Date.now() - updateTime < 15000)) {
+              setLastHardwareHeartbeat(Date.now());
+              setIsHardwareOnline(true);
+            }
+          }
         }
       });
     }, 2000);
@@ -156,6 +177,8 @@ export function useSupabaseIntegration() {
             return updated.slice(-30);
           });
           setConnectionStatus('ONLINE');
+          setLastHardwareHeartbeat(Date.now());
+          setIsHardwareOnline(true);
           setErrorMessage(null);
         }
       )
@@ -182,6 +205,9 @@ export function useSupabaseIntegration() {
               uap_auto_status: prev.uap_auto_status ?? false,
               uap_interval_min: prev.uap_interval_min ?? 10,
             }));
+            setConnectionStatus('ONLINE');
+            setLastHardwareHeartbeat(Date.now());
+            setIsHardwareOnline(true);
           }
         }
       )
@@ -193,6 +219,18 @@ export function useSupabaseIntegration() {
       supabase.removeChannel(controlsChannel);
     };
   }, [initializeData]);
+
+  // Periodic heartbeat watchdog to mark hardware offline if no packet for > 12s
+  useEffect(() => {
+    const watchdog = setInterval(() => {
+      if (lastHardwareHeartbeat && (Date.now() - lastHardwareHeartbeat < 12000)) {
+        setIsHardwareOnline(true);
+      } else {
+        setIsHardwareOnline(false);
+      }
+    }, 2000);
+    return () => clearInterval(watchdog);
+  }, [lastHardwareHeartbeat]);
 
   // Handlers untuk Dispatch Command Write dengan Try-Catch & Feedback State
   const handleFlowModeChange = async (flowMode: 'COUNTER' | 'CO-CURRENT') => {
@@ -411,6 +449,8 @@ export function useSupabaseIntegration() {
 
   return {
     connectionStatus,
+    isHardwareOnline,
+    lastHardwareHeartbeat,
     errorMessage,
     currentAnonKey,
     saveAnonKey,
