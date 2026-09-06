@@ -124,22 +124,20 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {/* Active Flow Mode Pill */}
           <span
-            className={`px-3 py-1 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wide border shadow-2xs transition-all ${
-              isCounter
+            className={`px-3 py-1 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wide border shadow-2xs transition-all ${isCounter
                 ? 'bg-sky-500 text-white border-sky-400/40 shadow-sky-500/20'
                 : 'bg-emerald-600 text-white border-emerald-400/40 shadow-emerald-500/20'
-            }`}
+              }`}
           >
             {diagramMode} {titleExtra}
           </span>
 
           {/* Relief Valves Status Pill */}
           <span
-            className={`px-2.5 py-1 rounded-xl text-[9px] sm:text-[10px] font-black border flex items-center gap-1 ${
-              uapStatus
+            className={`px-2.5 py-1 rounded-xl text-[9px] sm:text-[10px] font-black border flex items-center gap-1 ${uapStatus
                 ? 'bg-amber-100 text-amber-800 border-amber-300 animate-pulse'
                 : 'bg-slate-100 text-slate-600 border-slate-200'
-            }`}
+              }`}
           >
             <Wind className={`w-3 h-3 ${uapStatus ? 'text-amber-600' : 'text-slate-400'}`} />
             Katup Uap: {uapStatus ? 'VENTING' : 'CLOSED'}
@@ -147,11 +145,10 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
 
           {/* Cold Solenoid Valve Pill */}
           <span
-            className={`px-2.5 py-1 rounded-xl text-[9px] sm:text-[10px] font-black border flex items-center gap-1 ${
-              airDinginStatus
+            className={`px-2.5 py-1 rounded-xl text-[9px] sm:text-[10px] font-black border flex items-center gap-1 ${airDinginStatus
                 ? 'bg-sky-100 text-sky-800 border-sky-300'
                 : 'bg-slate-100 text-slate-600 border-slate-200'
-            }`}
+              }`}
           >
             <Droplets className={`w-3 h-3 ${airDinginStatus ? 'text-sky-600' : 'text-slate-400'}`} />
             Solenoid: {airDinginStatus ? 'OPEN' : 'CLOSED'}
@@ -164,30 +161,123 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             className="px-2.5 py-1 rounded-xl text-[10px] sm:text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1"
           >
             <Info className="w-3 h-3 text-sky-600" />
-            {showHardwareMap ? 'Close Info' : 'Sensor Mapping'}
+            {showHardwareMap ? 'Tutup Keterangan Notasi' : 'Keterangan Sensor'}
           </button>
         </div>
       </div>
 
-      {/* ─── OPTIONAL SENSOR REFERENCE ACCORDION (MINIMALIS & RINGKAS) ─── */}
+      {/* ─── KETERANGAN SINGKAT SENSOR & SIMBOL (SESUAI BENTUK VISUAL) ─── */}
       {showHardwareMap && (
-        <div className="p-3 bg-white/95 rounded-xl border border-slate-200 shadow-xs space-y-2 text-[11px] animate-fadeIn">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="p-2 rounded-lg bg-orange-50/80 border border-orange-200">
-              <strong className="block text-slate-900 font-bold text-[10px]">T1 & P1 (Left Inlet)</strong>
-              <span className="text-[9px] text-orange-800 font-semibold block">{thi}°C • {pi1Val} atm</span>
+        <div className="p-2.5 sm:p-3 bg-white/95 rounded-xl border border-slate-200 shadow-xs space-y-2 text-[11px] animate-fadeIn">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {/* T1 & P1 */}
+            <div className="p-2 rounded-xl bg-orange-50/70 border border-orange-200/80 flex items-center gap-2.5">
+              <div className="flex items-center -space-x-1 shrink-0">
+                <span className="w-6 h-6 rounded-full bg-red-500 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  T1
+                </span>
+                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  P1
+                </span>
+              </div>
+              <div>
+                <strong className="block text-slate-900 font-black text-[11px] leading-tight">T1 & P1 (Left Inlet)</strong>
+                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Air Panas Masuk</span>
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-rose-50/80 border border-rose-200">
-              <strong className="block text-slate-900 font-bold text-[10px]">Tr & Pr (Cold Outlet)</strong>
-              <span className="text-[9px] text-rose-800 font-semibold block">{tho}°C • {pi2Val} atm</span>
+
+            {/* Tr & Pr */}
+            <div className="p-2 rounded-xl bg-rose-50/70 border border-rose-200/80 flex items-center gap-2.5">
+              <div className="flex items-center -space-x-1 shrink-0">
+                <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  Tr
+                </span>
+                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  Pr
+                </span>
+              </div>
+              <div>
+                <strong className="block text-slate-900 font-black text-[11px] leading-tight">Tr & Pr (Cold Outlet)</strong>
+                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Cangkang (Shell)</span>
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-cyan-50/80 border border-cyan-200">
-              <strong className="block text-slate-900 font-bold text-[10px]">T3 & P3 (Cold Inlet)</strong>
-              <span className="text-[9px] text-cyan-800 font-semibold block">{tci}°C • {pi3Val} atm</span>
+
+            {/* T3 & P3 */}
+            <div className="p-2 rounded-xl bg-cyan-50/70 border border-cyan-200/80 flex items-center gap-2.5">
+              <div className="flex items-center -space-x-1 shrink-0">
+                <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  T3
+                </span>
+                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  P3
+                </span>
+              </div>
+              <div>
+                <strong className="block text-slate-900 font-black text-[11px] leading-tight">T3 & P3 (Cold Inlet)</strong>
+                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Air Dingin Masuk</span>
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-sky-50/80 border border-sky-200">
-              <strong className="block text-slate-900 font-bold text-[10px]">T4 & P4 (Right Header)</strong>
-              <span className="text-[9px] text-sky-800 font-semibold block">{tco}°C • {pi4Val} atm</span>
+
+            {/* T4 & P4 */}
+            <div className="p-2 rounded-xl bg-sky-50/70 border border-sky-200/80 flex items-center gap-2.5">
+              <div className="flex items-center -space-x-1 shrink-0">
+                <span className="w-6 h-6 rounded-full bg-red-500 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  T4
+                </span>
+                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
+                  P4
+                </span>
+              </div>
+              <div>
+                <strong className="block text-slate-900 font-black text-[11px] leading-tight">T4 & P4 (Right Header)</strong>
+                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Header Kanan</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Simbol Visual Miniatur */}
+          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-600 pt-1.5 border-t border-slate-100">
+            <span className="font-black text-slate-700">Simbol:</span>
+
+            {/* VL */}
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
+                <polygon points="6,7 12,12 6,17" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+                <polygon points="18,7 12,12 18,17" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+                <circle cx="12" cy="12" r="2" fill="#92400E" />
+              </svg>
+              <span><strong>VL:</strong> Katup Manual</span>
+            </div>
+
+            {/* Flow Control */}
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-50 border border-orange-200 text-orange-900">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 20">
+                <rect x="1" y="1" width="22" height="18" rx="4" fill="#F97316" stroke="#C2410C" strokeWidth="1.5" />
+                <rect x="4" y="4" width="16" height="8" rx="2" fill="#FFFFFF" />
+              </svg>
+              <span><strong>Flow Control:</strong> Debit Aliran (L/m)</span>
+            </div>
+
+            {/* Solenoid */}
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                <rect x="2" y="13" width="20" height="9" rx="2" fill="#94A3B8" stroke="#475569" strokeWidth="1" />
+                <polygon points="2,13 12,17.5 2,22" fill="#64748B" />
+                <polygon points="22,13 12,17.5 22,22" fill="#64748B" />
+                <rect x="10" y="8" width="4" height="6" fill="#475569" />
+                <rect x="6" y="2" width="12" height="7" rx="1.5" fill="#1E293B" stroke="#0F172A" strokeWidth="1" />
+              </svg>
+              <span><strong>Solenoid:</strong> Katup Otomatis</span>
+            </div>
+
+            {/* Katup Uap */}
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-900">
+              <svg className="w-3 h-3.5 shrink-0" viewBox="0 0 20 20">
+                <rect x="7" y="10" width="6" height="8" fill="#0284C7" />
+                <rect x="4" y="3" width="12" height="7" rx="1.5" fill="#0EA5E9" stroke="#0369A1" strokeWidth="1" />
+              </svg>
+              <span><strong>Katup Uap:</strong> Pelepas Uap</span>
             </div>
           </div>
         </div>
@@ -348,13 +438,13 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             onMouseLeave={() => handleHover(null)}
           >
             {/* Bowtie gate valve: two triangles meeting at center */}
-            <circle cx="224" cy="175" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5"/>
-            <polygon points="215,168 224,175 215,182" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <polygon points="233,168 224,175 233,182" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <circle cx="224" cy="175" r="2" fill="#92400E"/>
+            <circle cx="224" cy="175" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
+            <polygon points="215,168 224,175 215,182" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <polygon points="233,168 224,175 233,182" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <circle cx="224" cy="175" r="2" fill="#92400E" />
             {/* Actuator stem up */}
-            <line x1="224" y1="164" x2="224" y2="159" stroke="#B45309" strokeWidth="2"/>
-            <rect x="220" y="155" width="8" height="4" rx="1" fill="#B45309"/>
+            <line x1="224" y1="164" x2="224" y2="159" stroke="#B45309" strokeWidth="2" />
+            <rect x="220" y="155" width="8" height="4" rx="1" fill="#B45309" />
             <text x="224" y="192" textAnchor="middle" className="text-[7.5px] font-black fill-amber-900">VL</text>
           </g>
 
@@ -622,17 +712,17 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
           {/* Header Kiri (Dome Cap) + Flange */}
           <g>
             <path d="M 270,230 C 215,230 215,390 270,390 Z" fill="#E2E8F0" stroke="#475569" strokeWidth="2.5" />
-            <rect x="270" y="230" width="12" height="160" rx="3" fill="url(#flangeGrad)" stroke="#475569" strokeWidth="2"/>
+            <rect x="270" y="230" width="12" height="160" rx="3" fill="url(#flangeGrad)" stroke="#475569" strokeWidth="2" />
             {/* Bolts */}
             {[245, 275, 305, 335, 365].map((y) => (
               <circle key={`bl-${y}`} cx="276" cy={y} r="3" fill="#1E293B" />
             ))}
           </g>
-          
+
           {/* Header Kanan (Dome Cap) + Flange */}
           <g>
             <path d="M 750,230 C 805,230 805,390 750,390 Z" fill="#E2E8F0" stroke="#475569" strokeWidth="2.5" />
-            <rect x="738" y="230" width="12" height="160" rx="3" fill="url(#flangeGrad)" stroke="#475569" strokeWidth="2"/>
+            <rect x="738" y="230" width="12" height="160" rx="3" fill="url(#flangeGrad)" stroke="#475569" strokeWidth="2" />
             {/* Bolts */}
             {[245, 275, 305, 335, 365].map((y) => (
               <circle key={`br-${y}`} cx="744" cy={y} r="3" fill="#1E293B" />
@@ -725,21 +815,21 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
 
           {/* VL 1 — Butterfly/Gate valve bowtie symbol */}
           <g className="cursor-pointer" filter="url(#softShadow)">
-            <circle cx="132" cy="310" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5"/>
-            <polygon points="123,303 132,310 123,317" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <polygon points="141,303 132,310 141,317" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <circle cx="132" cy="310" r="2" fill="#92400E"/>
-            <line x1="132" y1="299" x2="132" y2="294" stroke="#B45309" strokeWidth="2"/>
-            <rect x="128" y="290" width="8" height="4" rx="1" fill="#B45309"/>
+            <circle cx="132" cy="310" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
+            <polygon points="123,303 132,310 123,317" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <polygon points="141,303 132,310 141,317" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <circle cx="132" cy="310" r="2" fill="#92400E" />
+            <line x1="132" y1="299" x2="132" y2="294" stroke="#B45309" strokeWidth="2" />
+            <rect x="128" y="290" width="8" height="4" rx="1" fill="#B45309" />
             <text x="132" y="327" textAnchor="middle" className="text-[7.5px] font-black fill-amber-900">VL</text>
           </g>
 
           {/* VL 2 (Katup Cabang Co-Current) — Butterfly valve */}
           <g className="cursor-pointer" filter="url(#softShadow)">
-            <circle cx="167" cy="310" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5"/>
-            <polygon points="158,303 167,310 158,317" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <polygon points="176,303 167,310 176,317" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <circle cx="167" cy="310" r="2" fill="#92400E"/>
+            <circle cx="167" cy="310" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
+            <polygon points="158,303 167,310 158,317" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <polygon points="176,303 167,310 176,317" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <circle cx="167" cy="310" r="2" fill="#92400E" />
             <rect x="174" y="320" width="14" height="9" rx="2" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="0.8" />
             <text x="181" y="327" textAnchor="middle" className="text-[7.5px] font-black fill-amber-900">VL</text>
           </g>
@@ -826,10 +916,10 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
 
           {/* VL Kanan — Katup VL di titik x=860 sesuai Gambar 1 */}
           <g className="cursor-pointer" filter="url(#softShadow)">
-            <circle cx="860" cy="310" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5"/>
-            <polygon points="851,303 860,310 851,317" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <polygon points="869,303 860,310 869,317" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <circle cx="860" cy="310" r="2" fill="#92400E"/>
+            <circle cx="860" cy="310" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
+            <polygon points="851,303 860,310 851,317" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <polygon points="869,303 860,310 869,317" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <circle cx="860" cy="310" r="2" fill="#92400E" />
             <text x="860" y="327" textAnchor="middle" className="text-[7.5px] font-black fill-amber-900">VL</text>
           </g>
 
@@ -879,12 +969,12 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
 
           {/* VL Air Dingin — Butterfly/Gate valve bowtie symbol */}
           <g className="cursor-pointer" filter="url(#softShadow)">
-            <circle cx="862" cy="420" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5"/>
-            <polygon points="853,413 862,420 853,427" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <polygon points="871,413 862,420 871,427" fill="#EAB308" stroke="#B45309" strokeWidth="1"/>
-            <circle cx="862" cy="420" r="2" fill="#92400E"/>
-            <line x1="862" y1="409" x2="862" y2="404" stroke="#B45309" strokeWidth="2"/>
-            <rect x="858" y="400" width="8" height="4" rx="1" fill="#B45309"/>
+            <circle cx="862" cy="420" r="11" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
+            <polygon points="853,413 862,420 853,427" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <polygon points="871,413 862,420 871,427" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
+            <circle cx="862" cy="420" r="2" fill="#92400E" />
+            <line x1="862" y1="409" x2="862" y2="404" stroke="#B45309" strokeWidth="2" />
+            <rect x="858" y="400" width="8" height="4" rx="1" fill="#B45309" />
             <text x="862" y="437" textAnchor="middle" className="text-[7.5px] font-black fill-amber-900">VL</text>
           </g>
 
