@@ -6,7 +6,7 @@
       "email": "anugrahtriplecycle@gmail.com",
       "role": "admin",
       "status": "Active",
-      "lastLogin": "2026-09-06T16:37:18.406Z",
+      "lastLogin": "2026-09-06T19:01:47.374Z",
       "isScheduleRestricted": false,
       "allowedStartDate": "2026-08-26",
       "allowedEndDate": "2026-08-31",
@@ -19,7 +19,7 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1788720307095
+      "lastSeen": 1788722118062
     },
     {
       "id": "USR-02",

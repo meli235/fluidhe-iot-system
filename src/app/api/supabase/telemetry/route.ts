@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kkxfbjpbaxnmgsnxrbpj.supabase.co';
-const DEFAULT_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const DEFAULT_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_secret_qs1xzvDy4f77cBcg3A9o0Q_YLLzIYVo';
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = 1): Promise<Response> {
   for (let i = 0; i <= retries; i++) {

@@ -1,0 +1,10 @@
+node_modules
+.next
+records
+scratch
+scripts/go2rtc.exe
+scripts/go2rtc.yaml
+scripts/*.py
+*.mp4
+.git
+.vercel
