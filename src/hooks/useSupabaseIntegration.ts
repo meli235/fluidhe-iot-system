@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   supabase,
   setSupabaseAnonKey,
@@ -46,6 +46,7 @@ export function useSupabaseIntegration() {
     btn_down: false
   });
   const [isUpdatingControl, setIsUpdatingControl] = useState<boolean>(false);
+  const lastUserActionTimeRef = useRef<number>(0);
 
   useEffect(() => {
     setCurrentAnonKey(getStoredAnonKey());
@@ -142,14 +143,22 @@ export function useSupabaseIntegration() {
 
       fetchDeviceControls().then(({ data, error }) => {
         if (!error && data) {
-          setDeviceControls((prev) => ({
-            ...prev,
-            ...data,
-            heater_1_status: prev.heater_1_status !== undefined ? prev.heater_1_status : Boolean(data.heater_status),
-            heater_2_status: prev.heater_2_status !== undefined ? prev.heater_2_status : false,
-            uap_auto_status: prev.uap_auto_status ?? false,
-            uap_interval_min: prev.uap_interval_min ?? 10,
-          }));
+          const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 10000);
+          setDeviceControls((prev) => {
+            const controlModeToKeep = isRecentlyUpdatedByUser ? prev.control_mode : (data.control_mode || prev.control_mode);
+            const flowModeToKeep = isRecentlyUpdatedByUser ? prev.flow_mode : (data.flow_mode || prev.flow_mode);
+
+            return {
+              ...prev,
+              ...data,
+              control_mode: controlModeToKeep,
+              flow_mode: flowModeToKeep,
+              heater_1_status: isRecentlyUpdatedByUser ? prev.heater_1_status : (data.heater_1_status !== undefined ? data.heater_1_status : Boolean(data.heater_status)),
+              heater_2_status: isRecentlyUpdatedByUser ? prev.heater_2_status : (data.heater_2_status !== undefined ? data.heater_2_status : false),
+              uap_auto_status: prev.uap_auto_status ?? false,
+              uap_interval_min: prev.uap_interval_min ?? 10,
+            };
+          });
 
           // Check if updated_at is within last 15 seconds
           if ((data as any).updated_at) {
@@ -196,15 +205,23 @@ export function useSupabaseIntegration() {
         { event: 'UPDATE', schema: 'public', table: 'device_controls' },
         (payload) => {
           const updatedControls = payload.new as DeviceControlsRow;
+          const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 10000);
           if (updatedControls && updatedControls.id === 1) {
-            setDeviceControls((prev) => ({
-              ...prev,
-              ...updatedControls,
-              heater_1_status: prev.heater_1_status !== undefined ? prev.heater_1_status : Boolean(updatedControls.heater_status),
-              heater_2_status: prev.heater_2_status !== undefined ? prev.heater_2_status : false,
-              uap_auto_status: prev.uap_auto_status ?? false,
-              uap_interval_min: prev.uap_interval_min ?? 10,
-            }));
+            setDeviceControls((prev) => {
+              const controlModeToKeep = isRecentlyUpdatedByUser ? prev.control_mode : (updatedControls.control_mode || prev.control_mode);
+              const flowModeToKeep = isRecentlyUpdatedByUser ? prev.flow_mode : (updatedControls.flow_mode || prev.flow_mode);
+
+              return {
+                ...prev,
+                ...updatedControls,
+                control_mode: controlModeToKeep,
+                flow_mode: flowModeToKeep,
+                heater_1_status: isRecentlyUpdatedByUser ? prev.heater_1_status : (updatedControls.heater_1_status !== undefined ? updatedControls.heater_1_status : Boolean(updatedControls.heater_status)),
+                heater_2_status: isRecentlyUpdatedByUser ? prev.heater_2_status : (updatedControls.heater_2_status !== undefined ? updatedControls.heater_2_status : false),
+                uap_auto_status: prev.uap_auto_status ?? false,
+                uap_interval_min: prev.uap_interval_min ?? 10,
+              };
+            });
             setConnectionStatus('ONLINE');
             setLastHardwareHeartbeat(Date.now());
             setIsHardwareOnline(true);
@@ -234,6 +251,7 @@ export function useSupabaseIntegration() {
 
   // Handlers untuk Dispatch Command Write dengan Try-Catch & Feedback State
   const handleFlowModeChange = async (flowMode: 'COUNTER' | 'CO-CURRENT') => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, flow_mode: flowMode }));
     const result = await supabaseControlService.setFlowMode(flowMode);
@@ -247,14 +265,28 @@ export function useSupabaseIntegration() {
   };
 
   const handleControlModeChange = async (controlMode: 'AUTO' | 'MANUAL') => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
-    setDeviceControls((prev) => ({ ...prev, control_mode: controlMode }));
+    setDeviceControls((prev) => ({
+      ...prev,
+      control_mode: controlMode,
+      ...(controlMode === 'AUTO' ? { flow_mode: 'COUNTER', air_dingin: true, uap_auto_status: true } : {})
+    }));
     const result = await supabaseControlService.setControlMode(controlMode);
     setIsUpdatingControl(false);
     if (!result.success) {
       setErrorMessage(`Gagal update control_mode: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+      if (result.data) {
+        setDeviceControls((prev) => ({
+          ...prev,
+          ...result.data,
+          control_mode: result.data!.control_mode || controlMode,
+          flow_mode: controlMode === 'AUTO' ? 'COUNTER' : (result.data!.flow_mode || prev.flow_mode),
+        }));
+      }
     }
     return result;
   };
@@ -348,6 +380,34 @@ export function useSupabaseIntegration() {
     return result;
   };
 
+  const handleValve1Change = async (percent: number) => {
+    setIsUpdatingControl(true);
+    const clamped = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    setDeviceControls((prev) => ({ ...prev, servo_angle: clamped }));
+    const result = await supabaseControlService.setValve1Percent(clamped);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal update Katup Panas: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+    }
+    return result;
+  };
+
+  const handleValve2Change = async (percent: number) => {
+    setIsUpdatingControl(true);
+    const clamped = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    setDeviceControls((prev) => ({ ...prev, servo_angle_2: clamped }));
+    const result = await supabaseControlService.setValve2Percent(clamped);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal update Katup Dingin: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+    }
+    return result;
+  };
+
   const handleTargetFlowChange = async (targetFlow: number) => {
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, target_flow: targetFlow }));
@@ -411,10 +471,18 @@ export function useSupabaseIntegration() {
 
   const handleStepButtonPress = async (btnName: 'btn_up' | 'btn_down') => {
     setIsUpdatingControl(true);
-    setActiveMomentaryButtons((prev) => ({ ...prev, [btnName]: true }));
-    setDeviceControls((prev) => ({ ...prev, [btnName]: true }));
+    const countKey = btnName === 'btn_up' ? 'step_up_count' : 'step_down_count';
+    const currentCount = deviceControls[countKey] ?? 0;
+    const nextCount = currentCount + 1;
 
-    const result = await supabaseControlService.triggerStepButton(btnName);
+    setActiveMomentaryButtons((prev) => ({ ...prev, [btnName]: true }));
+    setDeviceControls((prev) => ({
+      ...prev,
+      [btnName]: true,
+      [countKey]: nextCount
+    }));
+
+    const result = await supabaseControlService.triggerStepButton(btnName, currentCount);
     
     setActiveMomentaryButtons((prev) => ({ ...prev, [btnName]: false }));
     setDeviceControls((prev) => ({ ...prev, [btnName]: false }));
@@ -467,6 +535,8 @@ export function useSupabaseIntegration() {
     handleHeater2PowerToggle,
     handleTargetTempChange,
     handleServoAngleChange,
+    handleValve1Change,
+    handleValve2Change,
     handleTargetFlowChange,
     handleUapStatusToggle,
     handleUapAutoToggle,

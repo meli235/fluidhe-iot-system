@@ -100,20 +100,35 @@ export const supabaseControlService = {
 
   // 2. Switch Control Mode ("AUTO" / "MANUAL")
   setControlMode: async (controlMode: 'AUTO' | 'MANUAL') => {
-    return updateDeviceControls({ control_mode: controlMode });
+    if (controlMode === 'AUTO') {
+      // In AUTO mode: flow mode is COUNTER, Solenoid Air Dingin is ALWAYS OPEN (true)
+      return updateDeviceControls({
+        control_mode: 'AUTO',
+        flow_mode: 'COUNTER',
+        air_dingin: true
+      });
+    }
+    return updateDeviceControls({ control_mode: 'MANUAL' });
   },
 
-  // 3. Tombol Heater 1 & 2 Power Terpisah (boolean true / false)
+  // 3. Tombol Heater 1 & 2 Power Terpisah Sesuai ESP32
   setHeater1Power: async (status: boolean) => {
-    return updateDeviceControls({ heater_status: status, btn_onoff: status });
+    // Heater 1 dikontrol via btn_onoff mekanik servo + heater_1_status
+    return updateDeviceControls({ heater_1_status: status, btn_onoff: status });
   },
 
   setHeater2Power: async (status: boolean) => {
-    return updateDeviceControls({ heater_status: status, btn_onoff: status });
+    // Heater 2 dikontrol via heater_2_status (Direct Relay PIN 14)
+    return updateDeviceControls({ heater_2_status: status });
   },
 
   setHeaterPower: async (heaterStatus: boolean) => {
-    return updateDeviceControls({ heater_status: heaterStatus, btn_onoff: heaterStatus });
+    return updateDeviceControls({
+      heater_status: heaterStatus,
+      heater_1_status: heaterStatus,
+      heater_2_status: heaterStatus,
+      btn_onoff: heaterStatus
+    });
   },
 
   // 4. Slider/Input Target Suhu (float, e.g. 62.5)
@@ -122,9 +137,19 @@ export const supabaseControlService = {
     return updateDeviceControls({ target_temp: parsedFloat });
   },
 
-  // 5. Slider/Input Sudut Servo (0 - 180 Derajat, integer e.g. 52)
+  // 5. Motorized Valve 1 (Panas) & Valve 2 (Dingin)
+  setValve1Percent: async (percent: number) => {
+    const parsed = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    return updateDeviceControls({ servo_angle: parsed });
+  },
+
+  setValve2Percent: async (percent: number) => {
+    const parsed = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    return updateDeviceControls({ servo_angle_2: parsed });
+  },
+
   setServoAngle: async (servoAngle: number) => {
-    const parsedInt = Math.min(180, Math.max(0, Math.round(servoAngle)));
+    const parsedInt = Math.min(100, Math.max(0, Math.round(servoAngle / 20) * 20));
     return updateDeviceControls({ servo_angle: parsedInt });
   },
 
@@ -140,11 +165,27 @@ export const supabaseControlService = {
   },
 
   setUapAutoStatus: async (uapAutoStatus: boolean) => {
-    return updateDeviceControls({ uap_auto_status: uapAutoStatus });
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('he_uap_auto_status', String(uapAutoStatus));
+      } catch (e) {}
+    }
+    return { success: true, data: null, error: null };
   },
 
   setUapIntervalMin: async (intervalMin: number) => {
-    return updateDeviceControls({ uap_interval_min: intervalMin });
+    const clamped = Math.min(30, Math.max(5, Math.round(intervalMin)));
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('he_uap_interval_min', String(clamped));
+      } catch (e) {}
+    }
+    return { success: true, data: null, error: null };
+  },
+
+  setUapDurationSec: async (durationSec: number) => {
+    const clamped = Math.min(10, Math.max(1, Math.round(durationSec)));
+    return updateDeviceControls({ valve_duration: clamped });
   },
 
   // 8. Toggle Katup Air Dingin (boolean true / false)
@@ -152,10 +193,15 @@ export const supabaseControlService = {
     return updateDeviceControls({ air_dingin: airDinginStatus });
   },
 
-  // 9. Momentary Servo Buttons UP/DOWN (Rising edge pulse 200ms: true -> wait 200ms -> false)
-  triggerStepButton: async (btnName: 'btn_up' | 'btn_down') => {
+  // 9. Step Buttons UP/DOWN (Increment step_up_count / step_down_count & pulse momentary)
+  triggerStepButton: async (btnName: 'btn_up' | 'btn_down', currentCount: number = 0) => {
     try {
-      const startRes = await updateDeviceControls({ [btnName]: true });
+      const countKey = btnName === 'btn_up' ? 'step_up_count' : 'step_down_count';
+      const nextCount = currentCount + 1;
+      const startRes = await updateDeviceControls({
+        [btnName]: true,
+        [countKey]: nextCount
+      });
       if (!startRes.success) return startRes;
 
       await new Promise((resolve) => setTimeout(resolve, 300));

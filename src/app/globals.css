@@ -70,28 +70,41 @@ body {
 /* Flow Animations */
 @keyframes flowDash {
   to {
-    stroke-dashoffset: -32;
+    stroke-dashoffset: -48;
   }
 }
 
 .animate-flow-hot {
-  stroke-dasharray: 8 8;
+  stroke-dasharray: 12 12;
   animation: flowDash 1s linear infinite;
 }
 
 .animate-flow-cold {
-  stroke-dasharray: 8 8;
+  stroke-dasharray: 12 12;
   animation: flowDash 1.2s linear infinite reverse;
 }
 
 .animate-flow-cold-reverse {
-  stroke-dasharray: 8 8;
+  stroke-dasharray: 12 12;
   animation: flowDash 1.2s linear infinite reverse;
 }
 
 .animate-flow-cold-forward {
-  stroke-dasharray: 8 8;
+  stroke-dasharray: 12 12;
   animation: flowDash 1.2s linear infinite;
+}
+
+@keyframes flowDotsCold {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.animate-flow-dots-cold {
+  animation: flowDotsCold 2.5s linear infinite;
 }
 
 @keyframes pulseGlow {
@@ -143,3 +156,63 @@ input[type="range"]::-webkit-slider-thumb:hover {
     display: block !important;
   }
 }
+
+/* Ambient SaaS & Spatial UI Helpers */
+.blueprint-grid-pattern {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+.blueprint-grid-pattern-lg {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.28) 1.25px, transparent 1.25px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.28) 1.25px, transparent 1.25px);
+  background-size: 96px 96px;
+}
+
+
+.spatial-glass-tile {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.25),
+    inset 0 1px 1px rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.spatial-glass-tile-subtle {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 15px 35px -8px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(var(--rot, 0deg));
+  }
+  50% {
+    transform: translateY(-8px) rotate(var(--rot, 0deg));
+  }
+}
+
+.animate-float-slow {
+  animation: floatGentle 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: floatGentle 7s ease-in-out 2s infinite;
+}
+
+.grid-mask-fade {
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0, 0, 0, 0.4) 45%, rgba(0, 0, 0, 1) 85%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 20%, rgba(0, 0, 0, 0.4) 45%, rgba(0, 0, 0, 1) 85%);
+}
+
+
+

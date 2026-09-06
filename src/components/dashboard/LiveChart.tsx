@@ -1,14 +1,61 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Activity } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Activity, Clock, Sliders, ChevronDown } from 'lucide-react';
 import { TelemetryPoint } from '@/types';
 
 interface LiveChartProps {
   telemetryHistory: TelemetryPoint[];
+  operatorSessionLimit?: number;
 }
 
 type ChannelKey = 'all' | 'ti1' | 'ti2' | 'ti3' | 'ti4';
+type DurationMode = '15m' | '30m' | '60m' | '120m' | 'live';
+
+/**
+ * Parses various timestamp formats (HH:MM:SS, HH.MM.SS, HH:MM, ISO 8601) to seconds since midnight (0 - 86399)
+ */
+function parseTimeToSeconds(timestampStr: string): number | null {
+  if (!timestampStr) return null;
+
+  // Try ISO Date String
+  if (timestampStr.includes('T') || timestampStr.includes('-')) {
+    const parsedDate = new Date(timestampStr);
+    if (!isNaN(parsedDate.getTime())) {
+      return parsedDate.getHours() * 3600 + parsedDate.getMinutes() * 60 + parsedDate.getSeconds();
+    }
+  }
+
+  // Handle "18/08/2026 10:32:05" or "10:32:05 WIB"
+  const timeOnly = timestampStr.replace(/.*?\s(\d{1,2}[:.]\d{1,2}(?:[:.]\d{1,2})?).*/, '$1');
+  const cleanStr = (timeOnly || timestampStr).replace(/[^\d:.]/g, '');
+  const parts = cleanStr.split(/[:.]/).map(Number);
+
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    const hours = Math.min(23, Math.max(0, parts[0]));
+    const minutes = Math.min(59, Math.max(0, parts[1]));
+    const seconds = parts.length >= 3 && !isNaN(parts[2]) ? Math.min(59, Math.max(0, parts[2])) : 0;
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  return null;
+}
+
+/**
+ * Formats total seconds from midnight to HH:MM or HH:MM:SS
+ */
+function formatSecondsToTime(totalSeconds: number, includeSeconds = false): string {
+  const normalized = ((Math.floor(totalSeconds) % 86400) + 86400) % 86400;
+  const h = Math.floor(normalized / 3600);
+  const m = Math.floor((normalized % 3600) / 60);
+  const s = Math.floor(normalized % 60);
+
+  const hh = String(h).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+
+  return includeSeconds ? `${hh}:${mm}:${ss}` : `${hh}:${mm}`;
+}
 
 /**
  * Calculates a smooth Cubic Bezier path through discrete points (Catmull-Rom spline conversion)
@@ -45,103 +92,62 @@ function getAreaPath(points: { x: number; y: number }[], baselineY: number): str
   return `${linePath} L ${lastX},${baselineY} L ${firstX},${baselineY} Z`;
 }
 
-export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
+export const LiveChart: React.FC<LiveChartProps> = ({
+  telemetryHistory,
+  operatorSessionLimit = 60
+}) => {
   const [activeChannel, setActiveChannel] = useState<ChannelKey>('all');
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
 
-  // Generate dynamic undulating wave demo data (matching reference image)
-  const [demoHistory, setDemoHistory] = useState<TelemetryPoint[]>(() => {
-    const pts: TelemetryPoint[] = [];
-    const baseTime = Date.now() - 20 * 2000;
-    for (let i = 0; i < 20; i++) {
-      const t = new Date(baseTime + i * 2000).toLocaleTimeString('id-ID');
-      const angle = i * 0.65;
-      const ti4 = parseFloat((48 + 14 * Math.sin(angle) + 4 * Math.cos(angle * 1.8)).toFixed(1));
-      const ti1 = parseFloat((72 + 10 * Math.sin(angle + 1.2) + 3 * Math.cos(angle * 1.5)).toFixed(1));
-      const ti2 = parseFloat((58 + 7 * Math.sin(angle - 0.8) + 2 * Math.cos(angle * 1.2)).toFixed(1));
-      const ti3 = parseFloat((29 + 4 * Math.sin(angle * 0.8) + 1.5 * Math.cos(angle * 1.1)).toFixed(1));
-      pts.push({
-        timestamp: t,
-        ti1,
-        ti2,
-        ti3,
-        ti4,
-        ti5: parseFloat(((ti3 + ti4) / 2).toFixed(1)),
-        ti6: parseFloat(((ti1 + ti2) / 2).toFixed(1)),
-        pi1: 2.1,
-        pi2: 1.7,
-        pi3: 1.9,
-        pi4: 1.5,
-        fc1: 4.5,
-        fc2: 5.2,
-        tc1Setpoint: 75,
-        heater1Active: true,
-        heater2Active: true,
-        mode: 'Counter-Current'
-      });
-    }
-    return pts;
-  });
+  // Practical Session Duration View Mode (Default: '60m' / 1 Jam)
+  const [durationMode, setDurationMode] = useState<DurationMode>('60m');
+  const [isTimeConfigOpen, setIsTimeConfigOpen] = useState<boolean>(false);
+  const [userSelectedStart, setUserSelectedStart] = useState<string | null>(null);
 
-  // Continuous animation ticker for wave demo
-  React.useEffect(() => {
-    if (!isDemoMode) return;
-    const interval = setInterval(() => {
-      setDemoHistory((prev) => {
-        const now = new Date();
-        const t = now.toLocaleTimeString('id-ID');
-        const count = prev.length;
-        const angle = (Date.now() / 1000) * 0.8;
+  // Real-time ticking clock for synchronized UI and indicators
+  const [now, setNow] = useState<Date>(() => new Date());
 
-        const ti4 = parseFloat((48 + 14 * Math.sin(angle) + 4 * Math.cos(angle * 1.8)).toFixed(1));
-        const ti1 = parseFloat((72 + 10 * Math.sin(angle + 1.2) + 3 * Math.cos(angle * 1.5)).toFixed(1));
-        const ti2 = parseFloat((58 + 7 * Math.sin(angle - 0.8) + 2 * Math.cos(angle * 1.2)).toFixed(1));
-        const ti3 = parseFloat((29 + 4 * Math.sin(angle * 0.8) + 1.5 * Math.cos(angle * 1.1)).toFixed(1));
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-        const nextPt: TelemetryPoint = {
-          timestamp: t,
-          ti1,
-          ti2,
-          ti3,
-          ti4,
-          ti5: parseFloat(((ti3 + ti4) / 2).toFixed(1)),
-          ti6: parseFloat(((ti1 + ti2) / 2).toFixed(1)),
-          pi1: 2.1,
-          pi2: 1.7,
-          pi3: 1.9,
-          pi4: 1.5,
-          fc1: 4.5,
-          fc2: 5.2,
-          tc1Setpoint: 75,
-          heater1Active: true,
-          heater2Active: true,
-          mode: 'Counter-Current'
-        };
-        return [...prev.slice(1), nextPt];
-      });
-    }, 1500);
+  // Sort raw history chronologically to prevent backward jumps
+  const sortedHistory = useMemo(() => {
+    if (!telemetryHistory || telemetryHistory.length === 0) return [];
+    return [...telemetryHistory].sort((a, b) => {
+      const secA = parseTimeToSeconds(a.timestamp) ?? 0;
+      const secB = parseTimeToSeconds(b.timestamp) ?? 0;
+      return secA - secB;
+    });
+  }, [telemetryHistory]);
 
-    return () => clearInterval(interval);
-  }, [isDemoMode]);
+  // Current real-time clock hour string (e.g. "15:00" when now is 15:37)
+  const currentRealTimeHourStr = useMemo(() => {
+    return `${String(now.getHours()).padStart(2, '0')}:00`;
+  }, [now]);
 
-  const activeHistory = isDemoMode || !telemetryHistory || telemetryHistory.length < 2
-    ? demoHistory
-    : telemetryHistory;
+  // Effective Start Time for the Chart (defaults to current real-time hour)
+  const activeStartTime = useMemo(() => {
+    if (userSelectedStart) return userSelectedStart;
+    return currentRealTimeHourStr;
+  }, [userSelectedStart, currentRealTimeHourStr]);
 
   // SVG Dimension Constants
-  const width = 860;
-  const height = 240;
-  const padLeft = 45;
-  const padRight = 30;
-  const padTop = 25;
-  const padBottom = 45;
+  const width = 880;
+  const height = 250;
+  const padLeft = 48;
+  const padRight = 32;
+  const padTop = 28;
+  const padBottom = 48;
 
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - padTop - padBottom;
   const baselineY = height - padBottom;
 
-  // Temperature Scale: Standard Full Scale 0°C to 100°C (with 20°C steps)
+  // Temperature Scale: Standard Industrial Full Scale 0°C to 100°C (20°C step lines)
   const minTemp = 0;
   const maxTemp = 100;
   const tempSteps = [100, 80, 60, 40, 20, 0];
@@ -152,28 +158,107 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
     return baselineY - ratio * plotHeight;
   };
 
-  const mapX = (index: number, total: number) => {
-    if (total <= 1) return padLeft;
-    return padLeft + (index / (total - 1)) * plotWidth;
-  };
+  // Calculate Time Window (Start Seconds & Duration Seconds)
+  const timeWindow = useMemo(() => {
+    let startSec = parseTimeToSeconds(activeStartTime) ?? 14 * 3600;
+    let durationSec = 3600; // Default 1 hour
 
-  // Precompute smooth point arrays
-  const totalPoints = activeHistory.length;
+    if (durationMode === '15m') {
+      durationSec = 15 * 60;
+    } else if (durationMode === '30m') {
+      durationSec = 30 * 60;
+    } else if (durationMode === '60m') {
+      durationSec = 60 * 60;
+    } else if (durationMode === '120m') {
+      durationSec = 120 * 60;
+    }
+
+    const endSec = startSec + durationSec;
+    return {
+      startSec,
+      endSec,
+      durationSec,
+      startTimeStr: formatSecondsToTime(startSec),
+      endTimeStr: formatSecondsToTime(endSec),
+      durationMin: Math.round(durationSec / 60)
+    };
+  }, [durationMode, activeStartTime]);
+
+  // Map Telemetry Points to X Coordinates based on Time Window or Point Index
+  const { filteredPoints, timeTicks } = useMemo(() => {
+    if (durationMode === 'live') {
+      // Rolling live mode: Distribute evenly across points
+      const total = sortedHistory.length;
+      const points = sortedHistory.map((d, i) => {
+        const x = total <= 1 ? padLeft : padLeft + (i / (total - 1)) * plotWidth;
+        return { ...d, plotX: x, originalIndex: i };
+      });
+
+      const tickStep = Math.max(1, Math.floor(total / 6));
+      const ticks = points.filter((_, i) => i % tickStep === 0 || i === total - 1).map((p) => ({
+        x: p.plotX,
+        label: p.timestamp
+      }));
+
+      return { filteredPoints: points, timeTicks: ticks };
+    }
+
+    // Fixed Duration Mode (e.g. 1 Jam / 30m / 15m / 2 Jam)
+    const { startSec, durationSec } = timeWindow;
+
+    const pointsWithTime = sortedHistory
+      .map((d, idx) => {
+        const sec = parseTimeToSeconds(d.timestamp);
+        return { ...d, sec, originalIndex: idx };
+      })
+      .filter((d): d is typeof d & { sec: number } => d.sec !== null);
+
+    const mapped = pointsWithTime.map((d) => {
+      let relSec = d.sec - startSec;
+      if (relSec < -43200) relSec += 86400; // Handle midnight wrap
+      if (relSec > 43200) relSec -= 86400;
+
+      const ratio = Math.max(0, Math.min(1, relSec / durationSec));
+      const plotX = padLeft + ratio * plotWidth;
+      return {
+        ...d,
+        plotX,
+        relSec,
+        isInsideWindow: relSec >= 0 && relSec <= durationSec
+      };
+    });
+
+    // Generate 7 evenly spaced time tick marks across the duration (e.g. 10:00, 10:10, 10:20... 11:00)
+    const numTicks = 6;
+    const ticks = [];
+    for (let i = 0; i <= numTicks; i++) {
+      const tickSec = startSec + (i / numTicks) * durationSec;
+      const x = padLeft + (i / numTicks) * plotWidth;
+      ticks.push({
+        x,
+        label: formatSecondsToTime(tickSec)
+      });
+    }
+
+    return { filteredPoints: mapped, timeTicks: ticks };
+  }, [sortedHistory, durationMode, timeWindow, padLeft, plotWidth]);
+
+  // Precompute smooth point arrays for SVG spline rendering
   const ti1Points = useMemo(
-    () => activeHistory.map((d, i) => ({ x: mapX(i, totalPoints), y: mapY(d.ti1) })),
-    [activeHistory]
+    () => filteredPoints.map((d) => ({ x: d.plotX, y: mapY(d.ti1) })),
+    [filteredPoints]
   );
   const ti2Points = useMemo(
-    () => activeHistory.map((d, i) => ({ x: mapX(i, totalPoints), y: mapY(d.ti2) })),
-    [activeHistory]
+    () => filteredPoints.map((d) => ({ x: d.plotX, y: mapY(d.ti2) })),
+    [filteredPoints]
   );
   const ti3Points = useMemo(
-    () => activeHistory.map((d, i) => ({ x: mapX(i, totalPoints), y: mapY(d.ti3) })),
-    [activeHistory]
+    () => filteredPoints.map((d) => ({ x: d.plotX, y: mapY(d.ti3) })),
+    [filteredPoints]
   );
   const ti4Points = useMemo(
-    () => activeHistory.map((d, i) => ({ x: mapX(i, totalPoints), y: mapY(d.ti4) })),
-    [activeHistory]
+    () => filteredPoints.map((d) => ({ x: d.plotX, y: mapY(d.ti4) })),
+    [filteredPoints]
   );
 
   const ti1Path = useMemo(() => getSmoothPath(ti1Points), [ti1Points]);
@@ -184,21 +269,169 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
   const ti1Area = useMemo(() => getAreaPath(ti1Points, baselineY), [ti1Points, baselineY]);
   const ti4Area = useMemo(() => getAreaPath(ti4Points, baselineY), [ti4Points, baselineY]);
 
-  const latestPoint = activeHistory[activeHistory.length - 1];
-  const hoveredPoint = hoverIndex !== null ? activeHistory[hoverIndex] : null;
+  const hoveredPoint = hoverIndex !== null && hoverIndex >= 0 && hoverIndex < filteredPoints.length ? filteredPoints[hoverIndex] : null;
+
+  // Real-Time Current Time Indicator inside session
+  const currentTimeSec = useMemo(() => {
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  }, [now]);
+
+  const currentTimeMarkerX = useMemo(() => {
+    if (durationMode === 'live') return null;
+    let relSec = currentTimeSec - timeWindow.startSec;
+    if (relSec < -43200) relSec += 86400;
+    if (relSec >= 0 && relSec <= timeWindow.durationSec) {
+      const ratio = relSec / timeWindow.durationSec;
+      return padLeft + ratio * plotWidth;
+    }
+    return null;
+  }, [currentTimeSec, timeWindow, durationMode, padLeft, plotWidth]);
 
   return (
     <div className="asklepios-card p-3.5 sm:p-6 bg-white shadow-sm border border-slate-200/80 rounded-2xl sm:rounded-3xl space-y-3 sm:space-y-4">
-      {/* Header (Clean, minimal, without redundant buttons) */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      {/* Header with Title, Session Duration Controls & Time Scale Selector */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3.5 pb-2 border-b border-slate-100">
         <div>
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-sky-600 animate-pulse" />
-            Grafik Gelombang Suhu Real-Time
-          </h3>
-          <p className="text-xs text-slate-500">
-            Dinamika termal terkalibrasi per interval waktu (TI₁ - TI₄)
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-sky-600 animate-pulse" />
+              Grafik Gelombang Suhu Real-Time
+            </h3>
+
+            {/* Active Session Range Badge */}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 text-sky-700 border border-sky-200/80 rounded-lg text-xs font-semibold">
+              <Clock className="w-3.5 h-3.5 text-sky-600" />
+              <span>
+                {durationMode === 'live'
+                  ? 'Mode: Live Rolling'
+                  : `Sesi: ${timeWindow.startTimeStr} - ${timeWindow.endTimeStr} WIB (${timeWindow.durationMin} Menit)`}
+              </span>
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Visualisasi dinamika termal terkalibrasi per durasi praktikum (TI₁ - TI₄)
           </p>
+        </div>
+
+        {/* Duration & Time Window Selectors */}
+        <div className="flex flex-wrap items-center gap-1.5 self-stretch sm:self-auto">
+          {/* Quick Duration Buttons */}
+          <div className="inline-flex p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 text-xs font-bold text-slate-600 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                setDurationMode('15m');
+                setUserSelectedStart(null);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '15m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
+                }`}
+            >
+              15m
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDurationMode('30m');
+                setUserSelectedStart(null);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '30m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
+                }`}
+            >
+              30m
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDurationMode('60m');
+                setUserSelectedStart(null);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '60m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
+                }`}
+            >
+              1 Jam
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDurationMode('120m');
+                setUserSelectedStart(null);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '120m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
+                }`}
+            >
+              2 Jam
+            </button>
+            <button
+              type="button"
+              onClick={() => setDurationMode('live')}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === 'live' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
+                }`}
+            >
+              Live
+            </button>
+          </div>
+
+          {/* Time Picker Trigger Button */}
+          {durationMode !== 'live' && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsTimeConfigOpen(!isTimeConfigOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                title="Atur Jam Mulai Praktikum"
+              >
+                <Sliders className="w-3.5 h-3.5 text-sky-600" />
+                <span>Mulai: {activeStartTime}</span>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+
+              {/* Time Configuration Dropdown Popover */}
+              {isTimeConfigOpen && (
+                <div className="absolute right-0 mt-1.5 w-68 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 z-30 space-y-2.5 text-xs animate-in fade-in zoom-in-95">
+                  <div className="font-bold text-slate-800 flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span>Pilih Jam Mulai:</span>
+                    <span className="text-[10px] text-sky-600 font-semibold">{timeWindow.durationMin} Menit Sesi</span>
+                  </div>
+
+                  {/* Dynamic Time Quick-Select Option */}
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserSelectedStart(currentRealTimeHourStr);
+                        setIsTimeConfigOpen(false);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl font-bold text-left flex items-center justify-between transition cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-sky-600" /> Jam Saat Ini / Live
+                      </span>
+                      <span className="font-mono">{currentRealTimeHourStr}</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1 pt-1">
+                    {['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'].map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        onClick={() => {
+                          setUserSelectedStart(time);
+                          setIsTimeConfigOpen(false);
+                        }}
+                        className={`px-1.5 py-1 rounded-lg text-center font-bold text-[11px] transition cursor-pointer ${activeStartTime === time
+                          ? 'bg-sky-600 text-white shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -206,21 +439,29 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
       <div className="w-full overflow-x-auto relative rounded-2xl bg-gradient-to-b from-slate-50/50 to-white border border-slate-100 p-2">
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-56 min-w-[700px] font-sans overflow-visible select-none"
+          className="w-full h-58 min-w-[720px] font-sans overflow-visible select-none"
           onMouseLeave={() => setHoverIndex(null)}
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const mouseX = ((e.clientX - rect.left) / rect.width) * width;
             const boundedX = Math.max(padLeft, Math.min(width - padRight, mouseX));
-            const ratio = (boundedX - padLeft) / plotWidth;
-            const index = Math.round(ratio * (totalPoints - 1));
-            if (index >= 0 && index < totalPoints) {
-              setHoverIndex(index);
+
+            let closestIdx = 0;
+            let minDist = Infinity;
+            filteredPoints.forEach((p, idx) => {
+              const dist = Math.abs(p.plotX - boundedX);
+              if (dist < minDist) {
+                minDist = dist;
+                closestIdx = idx;
+              }
+            });
+
+            if (filteredPoints.length > 0) {
+              setHoverIndex(closestIdx);
             }
           }}
         >
           <defs>
-            {/* Soft Ambient Area Fill Gradients matching reference image */}
             <linearGradient id="grad_airy_blue_area" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.22" />
               <stop offset="60%" stopColor="#60A5FA" stopOpacity="0.06" />
@@ -233,7 +474,6 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
               <stop offset="100%" stopColor="#FDE68A" stopOpacity="0.00" />
             </linearGradient>
 
-            {/* Glowing Flowing Stroke Gradients */}
             <linearGradient id="wave_grad_primary_flow" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#6366F1" />
               <stop offset="35%" stopColor="#3B82F6" />
@@ -247,7 +487,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
             </linearGradient>
           </defs>
 
-          {/* Grid Background Horizontal Lines & Labels (0°C to 100°C standard industrial scale) */}
+          {/* Grid Background Horizontal Lines & Labels (0°C to 100°C) */}
           {tempSteps.map((tempVal) => {
             const y = mapY(tempVal);
             return (
@@ -273,11 +513,47 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
             );
           })}
 
+          {/* Vertical Grid Ticks for Session Timestamps */}
+          {timeTicks.map((tick, idx) => (
+            <g key={idx}>
+              <line
+                x1={tick.x}
+                y1={padTop}
+                x2={tick.x}
+                y2={baselineY}
+                stroke="#F8FAFC"
+                strokeWidth="1"
+              />
+              <text
+                x={tick.x}
+                y={baselineY + 20}
+                textAnchor="middle"
+                className="text-[10px] fill-slate-500 font-semibold"
+              >
+                {tick.label}
+              </text>
+            </g>
+          ))}
+
+          {/* Empty / Waiting State Notice */}
+          {filteredPoints.length === 0 && (
+            <g>
+              <text
+                x={width / 2}
+                y={height / 2}
+                textAnchor="middle"
+                className="text-xs fill-slate-400 font-semibold"
+              >
+                Menunggu data telemetri real-time ({timeWindow.startTimeStr} - {timeWindow.endTimeStr} WIB)...
+              </text>
+            </g>
+          )}
+
           {/* Ambient Wave Gradients */}
           {(activeChannel === 'all' || activeChannel === 'ti4') && (
             <path d={ti4Area} fill="url(#grad_airy_blue_area)" className="transition-all duration-500 ease-out" />
           )}
-          {(activeChannel === 'ti1') && (
+          {activeChannel === 'ti1' && (
             <path d={ti1Area} fill="url(#grad_airy_amber_area)" className="transition-all duration-500 ease-out" />
           )}
 
@@ -323,7 +599,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
             />
           )}
 
-          {/* TI4: Cold Outlet (Signature Cyan-Blue Wave matching reference image) */}
+          {/* TI4: Cold Outlet (Signature Cyan-Blue Wave) */}
           {(activeChannel === 'all' || activeChannel === 'ti4') && (
             <path
               d={ti4Path}
@@ -334,6 +610,23 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
               strokeLinejoin="round"
               className="transition-all duration-500 ease-out drop-shadow-sm"
             />
+          )}
+
+          {/* Live Current Time Marker Line in Session */}
+          {currentTimeMarkerX !== null && (
+            <g>
+              <line
+                x1={currentTimeMarkerX}
+                y1={padTop}
+                x2={currentTimeMarkerX}
+                y2={baselineY}
+                stroke="#0284C7"
+                strokeWidth="1.5"
+                strokeDasharray="3 3"
+                opacity="0.75"
+              />
+              <circle cx={currentTimeMarkerX} cy={padTop + 4} r="3" fill="#0284C7" />
+            </g>
           )}
 
           {/* Latest Live Pulse Beacon at rightmost point */}
@@ -352,18 +645,17 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
           )}
 
           {/* Hover Crosshair Vertical Line */}
-          {hoverIndex !== null && (
+          {hoverIndex !== null && hoveredPoint && (
             <g>
               <line
-                x1={mapX(hoverIndex, totalPoints)}
+                x1={hoveredPoint.plotX}
                 y1={padTop}
-                x2={mapX(hoverIndex, totalPoints)}
+                x2={hoveredPoint.plotX}
                 y2={baselineY}
                 stroke="#64748B"
                 strokeWidth="1.5"
                 strokeDasharray="3 3"
               />
-              {/* Highlight Dots at Hover X */}
               {(activeChannel === 'all' || activeChannel === 'ti1') && (
                 <circle cx={ti1Points[hoverIndex]?.x} cy={ti1Points[hoverIndex]?.y} r="5" fill="#D97706" stroke="#fff" strokeWidth="2" />
               )}
@@ -372,35 +664,20 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
               )}
             </g>
           )}
-
-          {/* X-Axis Timestamps */}
-          {activeHistory.map((d, i) => {
-            const step = Math.max(1, Math.floor(totalPoints / 7));
-            if (i % step === 0 || i === totalPoints - 1) {
-              const x = mapX(i, totalPoints);
-              return (
-                <text
-                  key={i}
-                  x={x}
-                  y={baselineY + 22}
-                  textAnchor="middle"
-                  className="text-[10px] fill-slate-400 font-semibold"
-                >
-                  {d.timestamp}
-                </text>
-              );
-            }
-            return null;
-          })}
         </svg>
 
         {/* Hover Floating Tooltip */}
         {hoverIndex !== null && hoveredPoint && (
-          <div
-            className="absolute top-3 right-4 bg-slate-900/90 backdrop-blur-sm text-white px-3.5 py-2 rounded-xl text-xs shadow-xl border border-slate-700 pointer-events-none transition-all"
-          >
-            <div className="text-[10px] text-slate-400 font-bold mb-1 border-b border-slate-700 pb-0.5">
-              Waktu: {hoveredPoint.timestamp}
+          <div className="absolute top-3 right-4 bg-slate-900/90 backdrop-blur-sm text-white px-3.5 py-2.5 rounded-xl text-xs shadow-xl border border-slate-700 pointer-events-none transition-all z-20">
+            <div className="flex items-center justify-between gap-3 text-[10px] text-slate-300 font-bold mb-1.5 border-b border-slate-700 pb-1">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-sky-400" /> Waktu: {hoveredPoint.timestamp}
+              </span>
+              {durationMode !== 'live' && (
+                <span className="text-sky-400">
+                  {timeWindow.startTimeStr} - {timeWindow.endTimeStr}
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-[11px]">
               <span className="text-amber-400 font-bold">TI1 (Hot In): {hoveredPoint.ti1.toFixed(1)}°C</span>
@@ -412,47 +689,57 @@ export const LiveChart: React.FC<LiveChartProps> = ({ telemetryHistory }) => {
         )}
       </div>
 
-      {/* Legend Footer */}
-      <div className="flex flex-wrap justify-center items-center gap-6 pt-1 text-xs font-semibold">
+      {/* Legend Footer with Channel Toggles */}
+      <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6 pt-1 text-xs font-semibold">
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti1' ? 'all' : 'ti1')}
-          className={`flex items-center gap-2 cursor-pointer transition ${activeChannel === 'ti1' ? 'scale-105 font-bold' : ''
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti1' ? 'bg-amber-50 ring-1 ring-amber-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
-          <span className="w-3.5 h-1.5 bg-amber-600 rounded-full shadow-sm" />
-          <span className="text-amber-800">TI1 (Hot Inlet)</span>
+          <span className="w-3.5 h-1.5 bg-amber-600 rounded-full shadow-xs" />
+          <span className="text-amber-900">TI1 (Hot Inlet)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti2' ? 'all' : 'ti2')}
-          className={`flex items-center gap-2 cursor-pointer transition ${activeChannel === 'ti2' ? 'scale-105 font-bold' : ''
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti2' ? 'bg-rose-50 ring-1 ring-rose-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
           <span className="w-3.5 h-1.5 bg-rose-600 rounded-full border-dashed" />
-          <span className="text-rose-800">TI2 (Hot Outlet - Heater 2)</span>
+          <span className="text-rose-900">TI2 (Hot Outlet - Heater 2)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti3' ? 'all' : 'ti3')}
-          className={`flex items-center gap-2 cursor-pointer transition ${activeChannel === 'ti3' ? 'scale-105 font-bold' : ''
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti3' ? 'bg-cyan-50 ring-1 ring-cyan-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
           <span className="w-3.5 h-1.5 bg-cyan-600 rounded-full border-dashed" />
-          <span className="text-cyan-800">TI3 (Cold Inlet)</span>
+          <span className="text-cyan-900">TI3 (Cold Inlet)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti4' ? 'all' : 'ti4')}
-          className={`flex items-center gap-2 cursor-pointer transition ${activeChannel === 'ti4' ? 'scale-105 font-bold' : ''
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti4' ? 'bg-sky-50 ring-1 ring-sky-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
-          <span className="w-3.5 h-1.5 bg-sky-600 rounded-full shadow-sm" />
-          <span className="text-sky-800">TI4 (Cold Outlet)</span>
+          <span className="w-3.5 h-1.5 bg-sky-600 rounded-full shadow-xs" />
+          <span className="text-sky-900">TI4 (Cold Outlet)</span>
         </button>
+
+        {activeChannel !== 'all' && (
+          <button
+            type="button"
+            onClick={() => setActiveChannel('all')}
+            className="text-[11px] text-slate-500 hover:text-sky-600 font-bold underline cursor-pointer ml-2"
+          >
+            Tampilkan Semua
+          </button>
+        )}
       </div>
     </div>
   );

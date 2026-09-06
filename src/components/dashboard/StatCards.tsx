@@ -1,105 +1,160 @@
 'use client';
 
 import React from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Flame, Droplets, Gauge } from 'lucide-react';
 import { TelemetryPoint, TelemetryRow, TempLabels, DualHeaterState } from '@/types';
 
 interface StatCardsProps {
   tempLabels: TempLabels;
   supabaseTelemetry: TelemetryRow | null;
   latestData: TelemetryPoint;
-  dualHeaterState: Partial<DualHeaterState>;
+  dualHeaterState?: Partial<DualHeaterState>;
 }
 
 export const StatCards: React.FC<StatCardsProps> = ({
   tempLabels,
   supabaseTelemetry,
   latestData,
-  dualHeaterState
 }) => {
-  const heaterWatt = dualHeaterState.powerWatt ?? 0;
+  const t1 = supabaseTelemetry ? supabaseTelemetry.temp_1 : latestData.ti1;
+  const t2 = supabaseTelemetry ? supabaseTelemetry.temp_2 : latestData.ti2;
+  const t3 = supabaseTelemetry ? supabaseTelemetry.temp_3 : latestData.ti3;
+  const t4 = supabaseTelemetry ? supabaseTelemetry.temp_4 : latestData.ti4;
+
+  const fc1 = supabaseTelemetry?.flow_rate !== undefined ? supabaseTelemetry.flow_rate : latestData.fc1;
+  const fc2 = supabaseTelemetry?.flow_rate_2 !== undefined ? supabaseTelemetry.flow_rate_2 : latestData.fc2;
+
+  const pi1 = supabaseTelemetry?.pressure !== undefined ? supabaseTelemetry.pressure : latestData.pi1;
+  const pi2 = supabaseTelemetry?.pressure_outlet !== undefined ? supabaseTelemetry.pressure_outlet : latestData.pi2;
+  const deltaP1 = supabaseTelemetry?.delta_pressure !== undefined ? supabaseTelemetry.delta_pressure : (pi1 - pi2);
+
+  const pi3 = supabaseTelemetry?.pressure_inlet_2 !== undefined ? supabaseTelemetry.pressure_inlet_2 : latestData.pi3;
+  const pi4 = supabaseTelemetry?.pressure_outlet_2 !== undefined ? supabaseTelemetry.pressure_outlet_2 : latestData.pi4;
+  const deltaP2 = supabaseTelemetry?.delta_pressure_2 !== undefined ? supabaseTelemetry.delta_pressure_2 : (pi3 - pi4);
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-        <Activity className="w-4 h-4 text-sky-600" /> Pembacaan Sensor Real-Time
-      </h3>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2.5 text-xs">
-        {/* T1 */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">{tempLabels.t1}</span>
-          <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-            {supabaseTelemetry ? supabaseTelemetry.temp_1.toFixed(1) : latestData.ti1.toFixed(1)} °C
-          </strong>
+    <div className="space-y-3 sm:space-y-4">
+      {/* 1. Baris Suhu (4 Sensor) & Debit Aliran (2 Sensor: Panas & Dingin) */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-sky-600" /> Suhu & Debit Aliran Real-Time
+          </h3>
         </div>
 
-        {/* T2 */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">{tempLabels.t2}</span>
-          <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-            {supabaseTelemetry ? supabaseTelemetry.temp_2.toFixed(1) : latestData.ti2.toFixed(1)} °C
-          </strong>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-xs">
+          {/* T1 */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t1}</span>
+            <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
+              {t1.toFixed(1)} °C
+            </strong>
+          </div>
+
+          {/* T2 */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t2}</span>
+            <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
+              {t2.toFixed(1)} °C
+            </strong>
+          </div>
+
+          {/* T3 */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t3}</span>
+            <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
+              {t3.toFixed(1)} °C
+            </strong>
+          </div>
+
+          {/* T4 */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t4}</span>
+            <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
+              {t4.toFixed(1)} °C
+            </strong>
+          </div>
+
+          {/* FC1 Debit Panas */}
+          <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80 shadow-2xs hover:border-amber-400 transition-all">
+            <div className="flex items-center gap-1 text-[10px] text-amber-700 font-semibold truncate">
+              <Flame className="w-3 h-3 text-amber-500 shrink-0" />
+              <span>Debit Panas (FC1)</span>
+            </div>
+            <strong className="text-amber-900 font-extrabold text-sm sm:text-base">
+              {fc1.toFixed(2)} L/m
+            </strong>
+          </div>
+
+          {/* FC2 Debit Dingin */}
+          <div className="p-3 bg-sky-50/60 rounded-2xl border border-sky-200/80 shadow-2xs hover:border-sky-400 transition-all">
+            <div className="flex items-center gap-1 text-[10px] text-sky-700 font-semibold truncate">
+              <Droplets className="w-3 h-3 text-sky-500 shrink-0" />
+              <span>Debit Dingin (FC2)</span>
+            </div>
+            <strong className="text-sky-900 font-extrabold text-sm sm:text-base">
+              {fc2.toFixed(2)} L/m
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Baris Tekanan Fluida (4 Sensor) & Delta Tekanan (ΔP1 = P1 - P2, ΔP2 = P3 - P4) */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Gauge className="w-4 h-4 text-emerald-600" /> Tekanan Fluida & Delta Tekanan (ΔP)
+          </h3>
         </div>
 
-        {/* T3 */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">{tempLabels.t3}</span>
-          <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
-            {supabaseTelemetry ? supabaseTelemetry.temp_3.toFixed(1) : latestData.ti3.toFixed(1)} °C
-          </strong>
-        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-xs">
+          {/* PI1 Panas Masuk */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">PI1 (Inlet Panas)</span>
+            <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
+              {pi1.toFixed(2)} Bar
+            </strong>
+          </div>
 
-        {/* T4 */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">{tempLabels.t4}</span>
-          <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
-            {supabaseTelemetry ? supabaseTelemetry.temp_4.toFixed(1) : latestData.ti4.toFixed(1)} °C
-          </strong>
-        </div>
+          {/* PI2 Panas Keluar */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">PI2 (Outlet Panas)</span>
+            <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
+              {pi2.toFixed(2)} Bar
+            </strong>
+          </div>
 
-        {/* PI1 */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">Tekanan (PI1)</span>
-          <strong className="text-slate-800 font-extrabold text-sm sm:text-base">
-            {latestData.pi1.toFixed(2)} atm-g
-          </strong>
-        </div>
+          {/* ΔP1 (Panas: PI1 - PI2) */}
+          <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 shadow-2xs hover:border-emerald-300 transition-all">
+            <span className="text-[10px] text-emerald-800 font-bold block truncate">ΔP1 (P1 – P2 Panas)</span>
+            <strong className="text-emerald-700 font-black text-sm sm:text-base">
+              {deltaP1 >= 0 ? `+${deltaP1.toFixed(2)}` : deltaP1.toFixed(2)} Bar
+            </strong>
+          </div>
 
-        {/* FC1 */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">Debit Alir (FC1)</span>
-          <strong className="text-slate-800 font-extrabold text-sm sm:text-base">
-            {supabaseTelemetry ? supabaseTelemetry.flow_rate.toFixed(1) : latestData.fc1.toFixed(1)} L/m
-          </strong>
-        </div>
+          {/* PI3 Dingin Masuk */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">PI3 (Inlet Dingin)</span>
+            <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
+              {pi3.toFixed(2)} Bar
+            </strong>
+          </div>
 
-        {/* Status Heater */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">Status Heater</span>
-          <span
-            className={`inline-block px-2 py-0.5 mt-0.5 rounded text-[10px] font-extrabold border ${
-              supabaseTelemetry?.heater_status === 'ON' || heaterWatt > 0
-                ? 'bg-sky-50 text-sky-700 border-sky-200'
-                : 'bg-slate-200 text-slate-700 border-slate-300'
-            }`}
-          >
-            {heaterWatt > 0 ? `${heaterWatt}W` : 'OFF'}
-          </span>
-        </div>
+          {/* PI4 Dingin Keluar */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+            <span className="text-[10px] text-slate-500 font-semibold block truncate">PI4 (Outlet Dingin)</span>
+            <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
+              {pi4.toFixed(2)} Bar
+            </strong>
+          </div>
 
-        {/* Status Alarm */}
-        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-          <span className="text-[10px] text-slate-500 font-semibold block">Status Alarm</span>
-          <span
-            className={`inline-block px-2 py-0.5 mt-0.5 rounded text-[10px] font-extrabold border ${
-              supabaseTelemetry?.warning_status === 'NORMAL' || !supabaseTelemetry
-                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                : 'bg-rose-100 text-rose-800 border-rose-200'
-            }`}
-          >
-            {supabaseTelemetry ? supabaseTelemetry.warning_status : 'NORMAL'}
-          </span>
+          {/* ΔP2 (Dingin: PI3 - PI4) */}
+          <div className="p-3 bg-teal-50/70 rounded-2xl border border-teal-200 shadow-2xs hover:border-teal-300 transition-all">
+            <span className="text-[10px] text-teal-800 font-bold block truncate">ΔP2 (P3 – P4 Dingin)</span>
+            <strong className="text-teal-700 font-black text-sm sm:text-base">
+              {deltaP2 >= 0 ? `+${deltaP2.toFixed(2)}` : deltaP2.toFixed(2)} Bar
+            </strong>
+          </div>
         </div>
       </div>
     </div>

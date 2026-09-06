@@ -1,49 +1,46 @@
 'use client';
 
 import React from 'react';
-import { Gauge, RotateCw, Flame, Droplets, Activity } from 'lucide-react';
+import { Flame, Droplets, Activity, Gauge } from 'lucide-react';
 
 interface FlowAndValvesControlProps {
   controlMode: 'AUTO' | 'MANUAL';
   emergencyStopped?: boolean;
-  // Servo
-  servoAngle: number;
-  onChangeServoAngle: (angle: number) => void;
   // FC1 (Hot Valve)
   fc1Valve: number;
   onChangeFc1Valve: (val: number) => void;
   // FC2 (Cold Valve)
   fc2Valve: number;
   onChangeFc2Valve: (val: number) => void;
-  // Target Flow Rate
-  targetFlow: number;
-  onChangeTargetFlow: (val: number) => void;
+  // Optional backward-compatibility props
+  servoAngle?: number;
+  onChangeServoAngle?: (angle: number) => void;
+  targetFlow?: number;
+  onChangeTargetFlow?: (val: number) => void;
 }
+
+const VALVE_TICKS = [0, 20, 40, 60, 80, 100];
 
 export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
   controlMode,
   emergencyStopped = false,
-  servoAngle,
-  onChangeServoAngle,
   fc1Valve,
   onChangeFc1Valve,
   fc2Valve,
   onChangeFc2Valve,
-  targetFlow,
-  onChangeTargetFlow
 }) => {
   const isAuto = controlMode === 'AUTO';
 
   return (
     <div className="p-3 sm:p-5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 space-y-2.5 sm:space-y-4 col-span-1 lg:col-span-2">
-      {/* Unified Card Header */}
+      {/* Card Header */}
       <div className="flex justify-between items-center border-b border-slate-200/80 pb-2">
         <div className="flex items-center gap-1.5 sm:gap-2">
           <span className="p-1 sm:p-1.5 rounded-lg bg-sky-100 text-sky-700 border border-sky-200">
             <Gauge className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </span>
           <h4 className="text-[11px] sm:text-xs font-extrabold text-slate-900">
-            Pengaturan Katup & Laju Alir
+            Pengaturan Katup Aliran (Panas & Dingin)
           </h4>
         </div>
 
@@ -55,122 +52,85 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
         )}
       </div>
 
-      {/* Unified 4-Column Responsive Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-        {/* 1. Sudut Bukaan Katup Servo */}
-        <div className="p-2.5 sm:p-3.5 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5 sm:space-y-2.5 flex flex-col justify-between">
+      {/* 2-Column Responsive Grid: Katup Panas & Katup Dingin */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+        {/* 1. Bukaan Katup FC1 (Air Panas) */}
+        <div className="p-3.5 sm:p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-3 flex flex-col justify-between">
           <div className="flex justify-between items-center text-xs font-bold text-slate-800">
             <span className="flex items-center gap-1.5 text-slate-700">
-              <RotateCw className="w-3.5 h-3.5 text-sky-600" />
-              Katup Servo
-            </span>
-            <strong className="text-slate-900 font-mono font-extrabold text-sm">{servoAngle}°</strong>
-          </div>
-
-          <input
-            type="range"
-            min="0"
-            max="180"
-            value={servoAngle}
-            onChange={(e) => onChangeServoAngle(Number(e.target.value))}
-            disabled={emergencyStopped || isAuto}
-            className={`w-full h-2 bg-slate-200 rounded-lg appearance-none accent-sky-600 ${
-              isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
-            }`}
-          />
-
-          <div className="flex justify-between text-[10px] text-slate-500 font-semibold pt-0.5">
-            <span>0° (Tutup)</span>
-            <span>90°</span>
-            <span>180° (Buka)</span>
-          </div>
-        </div>
-
-        {/* 2. Bukaan Katup FC1 (Air Panas) */}
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200/90 shadow-xs space-y-2.5 flex flex-col justify-between">
-          <div className="flex justify-between items-center text-xs font-bold text-slate-800">
-            <span className="flex items-center gap-1.5 text-slate-700">
-              <Flame className="w-3.5 h-3.5 text-sky-600" />
+              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
               Katup FC1 (Panas)
             </span>
-            <strong className="text-slate-900 font-mono font-extrabold text-sm">{fc1Valve}%</strong>
+            <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 font-mono font-black text-xs sm:text-sm shadow-2xs">
+              {fc1Valve}%
+            </span>
           </div>
 
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={fc1Valve}
-            onChange={(e) => onChangeFc1Valve(Number(e.target.value))}
-            disabled={emergencyStopped || isAuto}
-            className={`w-full h-2 bg-slate-200 rounded-lg appearance-none accent-sky-600 ${
-              isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
-            }`}
-          />
-
-          <div className="flex justify-between text-[10px] text-slate-500 font-semibold pt-0.5">
-            <span>0%</span>
-            <span className="text-slate-400 font-normal">Est: {((fc1Valve / 100) * 25).toFixed(1)} L/m</span>
-            <span>100%</span>
+          {/* Pure Slider Control (Step 20: 0, 20, 40, 60, 80, 100) */}
+          <div className="space-y-2 pt-1">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="20"
+              value={fc1Valve}
+              onChange={(e) => onChangeFc1Valve(Number(e.target.value))}
+              disabled={emergencyStopped || isAuto}
+              className={`w-full h-2.5 bg-slate-200 rounded-lg appearance-none accent-amber-500 transition-all ${
+                isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+              }`}
+            />
+            {/* Scale Ticks: 0%, 20%, 40%, 60%, 80%, 100% */}
+            <div className="flex justify-between text-[10px] font-bold text-slate-500 px-0.5">
+              {VALVE_TICKS.map((tick) => (
+                <span
+                  key={tick}
+                  className={`transition-all ${fc1Valve === tick ? 'text-amber-600 font-black scale-110' : 'text-slate-400'}`}
+                >
+                  {tick}%
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* 3. Bukaan Katup FC2 (Air Dingin) */}
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200/90 shadow-xs space-y-2.5 flex flex-col justify-between">
+        {/* 2. Bukaan Katup FC2 (Air Dingin) */}
+        <div className="p-3.5 sm:p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-3 flex flex-col justify-between">
           <div className="flex justify-between items-center text-xs font-bold text-slate-800">
             <span className="flex items-center gap-1.5 text-sky-800">
-              <Droplets className="w-3.5 h-3.5 text-sky-600" />
+              <Droplets className="w-4 h-4 text-sky-600 shrink-0" />
               Katup FC2 (Dingin)
             </span>
-            <strong className="text-sky-700 font-mono font-extrabold text-sm">{fc2Valve}%</strong>
-          </div>
-
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={fc2Valve}
-            onChange={(e) => onChangeFc2Valve(Number(e.target.value))}
-            disabled={emergencyStopped || isAuto}
-            className={`w-full h-2 bg-slate-200 rounded-lg appearance-none accent-sky-600 ${
-              isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
-            }`}
-          />
-
-          <div className="flex justify-between text-[10px] text-slate-500 font-semibold pt-0.5">
-            <span>0%</span>
-            <span className="text-slate-400 font-normal">Est: {((fc2Valve / 100) * 30).toFixed(1)} L/m</span>
-            <span>100%</span>
-          </div>
-        </div>
-
-        {/* 4. Target Flow Rate (Debit Flow) */}
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200/90 shadow-xs space-y-2.5 flex flex-col justify-between">
-          <div className="flex justify-between items-center text-xs font-bold text-slate-800">
-            <span className="flex items-center gap-1.5 text-slate-700">
-              <Gauge className="w-3.5 h-3.5 text-sky-600" />
-              Target Flow
+            <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 font-mono font-black text-xs sm:text-sm shadow-2xs">
+              {fc2Valve}%
             </span>
-            <strong className="text-slate-900 font-mono font-extrabold text-sm">
-              {targetFlow.toFixed(1)} L/m
-            </strong>
           </div>
 
-          <input
-            type="range"
-            min="0.0"
-            max="10.0"
-            step="0.1"
-            value={targetFlow}
-            onChange={(e) => onChangeTargetFlow(Number(e.target.value))}
-            disabled={emergencyStopped}
-            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-600"
-          />
-
-          <div className="flex justify-between text-[10px] text-slate-500 font-semibold pt-0.5">
-            <span>0.0 L/m</span>
-            <span>5.0</span>
-            <span>10.0 L/m</span>
+          {/* Pure Slider Control (Step 20: 0, 20, 40, 60, 80, 100) */}
+          <div className="space-y-2 pt-1">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="20"
+              value={fc2Valve}
+              onChange={(e) => onChangeFc2Valve(Number(e.target.value))}
+              disabled={emergencyStopped || isAuto}
+              className={`w-full h-2.5 bg-slate-200 rounded-lg appearance-none accent-sky-600 transition-all ${
+                isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+              }`}
+            />
+            {/* Scale Ticks: 0%, 20%, 40%, 60%, 80%, 100% */}
+            <div className="flex justify-between text-[10px] font-bold text-slate-500 px-0.5">
+              {VALVE_TICKS.map((tick) => (
+                <span
+                  key={tick}
+                  className={`transition-all ${fc2Valve === tick ? 'text-sky-600 font-black scale-110' : 'text-slate-400'}`}
+                >
+                  {tick}%
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>

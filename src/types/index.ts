@@ -75,18 +75,35 @@ export interface DeviceControlsRow {
   control_mode: 'AUTO' | 'MANUAL';           // text
   flow_mode: 'COUNTER' | 'CO-CURRENT';       // text
   heater_status: boolean;                    // bool
-  heater_1_status?: boolean;                 // UI extension
-  heater_2_status?: boolean;                 // UI extension
-  servo_angle: number;                       // int4 (0 - 180)
+  heater_1_status?: boolean;                 // bool (Heater 1 status)
+  heater_2_status?: boolean;                 // bool (Heater 2 status)
+  servo_angle: number;                       // int4 (Valve 1 / Panas: 0 - 100%)
+  servo_angle_2?: number;                    // int4 (Valve 2 / Dingin: 0 - 100%)
   target_temp: number;                       // float4
   uap_status?: boolean;                      // bool
   uap_auto_status?: boolean;                 // UI extension
-  uap_interval_min?: number;                 // UI extension
-  air_dingin?: boolean;                      // bool
+  uap_interval_min?: number;                 // int4 (Interval buka uap menit)
+  valve_duration?: number;                   // int4 (Durasi buka uap detik)
+  air_dingin?: boolean;                      // bool (Solenoid air dingin)
   target_flow?: number;                      // numeric
   btn_up?: boolean;                          // bool
   btn_onoff?: boolean;                       // bool
   btn_down?: boolean;                        // bool
+  step_up_count?: number;                    // int4
+  step_down_count?: number;                  // int4
+  // Telemetri ESP32 yang disinkronkan ke device_controls
+  temp_1?: number;
+  temp_2?: number;
+  temp_3?: number;
+  temp_4?: number;
+  pressure?: number;
+  pressure_outlet?: number;
+  delta_pressure?: number;
+  pressure_inlet_2?: number;
+  pressure_outlet_2?: number;
+  delta_pressure_2?: number;
+  flow_rate?: number;
+  flow_rate_2?: number;
 }
 
 export type SupabaseConnectionStatus = 'ONLINE' | 'OFFLINE' | 'CONNECTING' | 'ERROR';

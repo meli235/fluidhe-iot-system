@@ -107,52 +107,93 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   getPasswordStrength
 }) => {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-between p-3.5 sm:p-6 md:p-8 relative overflow-hidden font-sans">
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-sky-200/50 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-cyan-200/50 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-gradient-to-b from-[#90c5fd] via-[#3b82f6] to-[#1d4ed8] flex flex-col justify-between p-2.5 sm:p-6 md:p-8 relative overflow-hidden font-sans text-slate-100 selection:bg-sky-400 selection:text-slate-900">
+      
+      {/* ─── SOFT AMBIENT LIGHTING & TOP GLOW ─── */}
+      {/* Soft Bright Top-Center Ambient Glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[480px] bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.75)_0%,rgba(186,230,253,0.4)_40%,transparent_75%)] pointer-events-none z-0" />
 
-      <header className="flex flex-col sm:flex-row justify-between items-center max-w-7xl mx-auto w-full z-10 gap-3">
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 relative flex items-center justify-center p-1 bg-white rounded-2xl shadow-md border border-slate-200/80 shrink-0">
+      {/* Ambient Mid Floating Glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-sky-300/25 rounded-full blur-3xl pointer-events-none z-0" />
+
+      {/* ─── CRISP BLUEPRINT GRID PATTERN WITH GRADIENT MASK ─── */}
+      <div className="absolute inset-0 blueprint-grid-pattern-lg opacity-70 grid-mask-fade pointer-events-none z-0" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(29,78,216,0.25)_100%)] pointer-events-none z-0" />
+
+      {/* ─── 3D FLOATING LAYERED GLASS BOXES (KHUSUS DESKTOP / WEB TAMPIL, MOBILE BERSIH GRID SAJA) ─── */}
+      {/* Bottom-Left 3D Layered Glass Tiles */}
+      <div className="hidden sm:block absolute -bottom-16 -left-16 sm:-bottom-10 sm:-left-10 pointer-events-none select-none z-0">
+        {/* Layer 3: Deepest Ambient Box */}
+        <div className="w-56 sm:w-72 h-56 sm:h-72 rounded-[2.5rem] sm:rounded-[3rem] spatial-glass-tile-subtle -rotate-[28deg] -translate-x-10 translate-y-12 opacity-50 animate-float-delayed" />
+        {/* Layer 2: Middle Translucent Glass Box with Shadow */}
+        <div className="absolute top-2 left-2 w-64 sm:w-84 h-64 sm:h-84 rounded-[2.8rem] sm:rounded-[3.2rem] spatial-glass-tile -rotate-[18deg] -translate-x-4 translate-y-6 opacity-75 animate-float-slow" />
+        {/* Layer 1: Foreground High-Gloss Glass Box */}
+        <div className="absolute top-8 left-8 w-56 sm:w-72 h-56 sm:h-72 rounded-[2.4rem] sm:rounded-[2.8rem] bg-gradient-to-tr from-white/25 via-white/10 to-transparent backdrop-blur-xl border border-white/40 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] -rotate-[10deg] opacity-90" />
+      </div>
+
+      {/* Bottom-Right 3D Layered Glass Tiles */}
+      <div className="hidden sm:block absolute -bottom-16 -right-16 sm:-bottom-10 sm:-right-10 pointer-events-none select-none z-0">
+        {/* Layer 3: Deepest Ambient Box */}
+        <div className="w-56 sm:w-72 h-56 sm:h-72 rounded-[2.5rem] sm:rounded-[3rem] spatial-glass-tile-subtle rotate-[28deg] translate-x-10 translate-y-12 opacity-50 animate-float-delayed" />
+        {/* Layer 2: Middle Translucent Glass Box with Shadow */}
+        <div className="absolute top-2 right-2 w-64 sm:w-84 h-64 sm:h-84 rounded-[2.8rem] sm:rounded-[3.2rem] spatial-glass-tile rotate-[18deg] translate-x-4 translate-y-6 opacity-75 animate-float-slow" />
+        {/* Layer 1: Foreground High-Gloss Glass Box */}
+        <div className="absolute top-8 right-8 w-56 sm:w-72 h-56 sm:h-72 rounded-[2.4rem] sm:rounded-[2.8rem] bg-gradient-to-tl from-white/25 via-white/10 to-transparent backdrop-blur-xl border border-white/40 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3)] rotate-[10deg] opacity-90" />
+      </div>
+
+      {/* ─── TOP HEADER (FLUIDHE KIRI + SCADA ONLINE KANAN - MOBILE & DESKTOP) ─── */}
+      <header className="flex justify-between items-center max-w-7xl mx-auto w-full z-10 gap-2 sm:gap-3 py-1">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 sm:bg-white/40 sm:backdrop-blur-xl sm:border sm:border-white/65 sm:px-3.5 sm:py-2 sm:rounded-2xl sm:shadow-[0_8px_30px_rgba(0,0,0,0.08)] min-w-0">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 relative flex items-center justify-center p-1 bg-white rounded-xl shadow-sm shrink-0 border border-white/80">
               <img src="/uad-logo.png" alt="Logo UAD" className="w-full h-full object-contain" />
             </div>
-            <div>
-              <h1 className="text-base sm:text-xl font-extrabold tracking-tight text-slate-900 flex items-center gap-1.5 sm:gap-2">
-                FluidHE <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold border border-sky-200">v2.5 IoT</span>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900 flex items-center gap-1 sm:gap-1.5">
+                FluidHE <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-sky-900/15 text-slate-900 font-bold border border-sky-900/20 shrink-0">v2.5 IoT</span>
               </h1>
-              <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1 sm:line-clamp-none">Universitas Ahmad Dahlan - Dual Heater & Solenoid Control</p>
+              <p className="text-[10px] sm:text-xs text-slate-800 font-medium truncate">Universitas Ahmad Dahlan • Dual Heater Control</p>
             </div>
           </div>
         </div>
+
+        {/* Top-Right Ambient Status Capsule */}
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-900/75 backdrop-blur-xl border border-white/30 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold text-white shadow-xl shrink-0">
+          <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span className="text-slate-100 tracking-wide">SCADA Online</span>
+        </div>
       </header>
 
-      <main className="max-w-md w-full mx-auto my-auto py-4 sm:py-8 z-10">
-        <div className="asklepios-card p-5 sm:p-8 bg-white/95 backdrop-blur-md shadow-2xl border border-slate-200/80 rounded-3xl">
-          <div className="text-center mb-5 sm:mb-6">
-            <div className="inline-flex p-2.5 bg-white rounded-2xl mb-3 border border-slate-200/80 shadow-md w-20 h-20 sm:w-24 sm:h-24 items-center justify-center">
-              <img src="/uad-logo.png" alt="Logo UAD" className="w-full h-full object-contain scale-110" />
+      {/* ─── MAIN HERO & LOGIN CONTAINER ─── */}
+      <main className="max-w-md w-full mx-auto my-auto py-2 sm:py-4 z-10 relative">
+        
+        {/* Industrial SCADA Lab Interface pill badge (Tengah di Atas Card) */}
+        <div className="text-center mb-2.5 sm:mb-3.5">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 py-1 sm:px-4 sm:py-1.5 rounded-full bg-white/40 backdrop-blur-xl border border-white/70 text-slate-900 text-[10.5px] sm:text-xs font-bold shadow-md">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-600 animate-pulse" />
+            <span>Industrial SCADA Lab Interface</span>
+          </div>
+        </div>
+
+        {/* Main Glassmorphic Card (Normal Size) */}
+        <div className="p-5 sm:p-8 bg-white/95 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.6)] rounded-3xl sm:rounded-[2.5rem] border border-white relative overflow-hidden text-slate-900">
+          
+          {/* Subtle Inner Glow Highlight */}
+          <div className="absolute top-0 inset-x-0 h-20 sm:h-24 bg-gradient-to-b from-sky-100/50 to-transparent pointer-events-none rounded-t-3xl sm:rounded-t-[2.5rem]" />
+
+          {/* Logo with Concentric Glowing Rings */}
+          <div className="text-center mb-4 sm:mb-6 relative">
+            <div className="relative inline-flex items-center justify-center p-2 sm:p-2.5 bg-gradient-to-b from-white to-sky-50 rounded-2xl mb-2 sm:mb-2.5 border border-sky-100 shadow-md sm:shadow-lg w-16 h-16 sm:w-22 sm:h-22">
+              <div className="absolute -inset-1.5 sm:-inset-2 rounded-2xl sm:rounded-3xl bg-sky-400/20 blur-md -z-10 animate-pulse-glow" />
+              <div className="absolute -inset-3 sm:-inset-4 rounded-2xl sm:rounded-3xl bg-blue-500/10 blur-xl -z-20" />
+              <img src="/uad-logo.png" alt="Logo UAD" className="w-full h-full object-contain scale-105 sm:scale-110" />
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900">Masuk ke Sistem</h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">Laboratorium Teknik Kimia & IoT Industri UAD</p>
+            <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight">Masuk ke Sistem</h2>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">Laboratorium Teknik Kimia & IoT Industri UAD</p>
           </div>
 
-          {/* Main Lab Role Switcher (Admin & Operator) */}
-          <div className="mb-5 p-1 bg-slate-100 rounded-2xl flex border border-slate-200/80 gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedDemoRole('admin');
-                setLoginError(null);
-              }}
-              className={`flex-1 py-2 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 ${selectedDemoRole === 'admin'
-                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                }`}
-            >
-              <Shield className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Admin <span className="font-normal opacity-85 text-[10px] hidden xs:inline">(Dosen/KaLab)</span></span>
-            </button>
+          {/* Main Lab Role Switcher (Operator & Admin) */}
+          <div className="mb-4 sm:mb-5 p-1 bg-slate-100/90 rounded-2xl flex border border-slate-200/90 gap-1 shadow-inner">
             <button
               type="button"
               onClick={() => {
@@ -160,12 +201,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 setLoginError(null);
               }}
               className={`flex-1 py-2 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 ${selectedDemoRole === 'operator'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-600/25'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                 }`}
             >
               <Users className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Operator <span className="font-normal opacity-85 text-[10px] hidden xs:inline">(Mahasiswa)</span></span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDemoRole('admin');
+                setLoginError(null);
+              }}
+              className={`flex-1 py-2 px-2 sm:px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 ${selectedDemoRole === 'admin'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                }`}
+            >
+              <Shield className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Admin <span className="font-normal opacity-85 text-[10px] hidden xs:inline">(Dosen/KaLab)</span></span>
             </button>
           </div>
 
@@ -175,7 +230,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               handleLogin();
             }}
             autoComplete="off"
-            className="space-y-3.5 sm:space-y-4"
+            className="space-y-3 sm:space-y-4"
           >
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Email / Username</label>
@@ -237,18 +292,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
 
             {loginError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-start gap-2 animate-in fade-in duration-200">
-                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
+              <div className="p-2.5 sm:p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg sm:rounded-xl text-xs flex items-start gap-2 animate-in fade-in duration-200">
+                <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 sm:space-y-1">
                   <p className="font-bold">{loginError}</p>
                 </div>
               </div>
             )}
 
-            <div className="p-3 rounded-2xl bg-sky-50/90 border border-sky-100 text-[11px] sm:text-xs text-sky-800 flex items-start gap-2 leading-relaxed">
-              <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+            <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border text-[10px] sm:text-xs flex items-start gap-2 leading-snug sm:leading-relaxed ${
+              selectedDemoRole === 'admin'
+                ? 'bg-emerald-50/90 border-emerald-100 text-emerald-800'
+                : 'bg-sky-50/90 border-sky-100 text-sky-800'
+            }`}>
+              <Info className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 mt-0.5 ${
+                selectedDemoRole === 'admin' ? 'text-emerald-600' : 'text-sky-600'
+              }`} />
               <span>
-                Role <strong className="uppercase font-bold">{selectedDemoRole}</strong>:{' '}
                 {selectedDemoRole === 'admin'
                   ? 'Akses penuh kendali hardware, verifikasi alarm & pemantauan CCTV.'
                   : 'Pengoperasian praktikum mahasiswa, pemantauan sensor real-time & unduh data Excel.'}
@@ -257,16 +317,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-lg shadow-sky-500/25 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+              className={`w-full py-2.5 sm:py-3 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
+                selectedDemoRole === 'admin'
+                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-700 hover:to-cyan-700 shadow-emerald-500/25'
+                  : 'bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 shadow-sky-500/25'
+              }`}
             >
               Masuk ke Dashboard Lab
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </form>
         </div>
+
+        {/* Copyright Footer Khusus Mobile (Dekat di Bawah Card Login) */}
+        <footer className="sm:hidden text-center text-[10px] text-white/80 z-10 pt-3 pb-1 px-4 leading-relaxed font-medium">
+          © 2026 Heat Exchanger Control System • Universitas Ahmad Dahlan
+        </footer>
       </main>
 
-      <footer className="text-center text-[10px] sm:text-xs text-slate-400 z-10 py-2.5 px-4 leading-relaxed">
+      {/* Copyright Footer Khusus Desktop / Web (Di Bawah Halaman Seperti Gambar) */}
+      <footer className="hidden sm:block text-center text-xs text-white/70 z-10 py-2.5 px-4 leading-relaxed font-medium">
         © 2026 Heat Exchanger Control System • Universitas Ahmad Dahlan
       </footer>
 

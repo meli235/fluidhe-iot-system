@@ -24,6 +24,7 @@ import { formatLastLogin } from '@/lib/dateFormatter';
 
 export interface UserManagerProps {
   currentUser?: { name: string; email: string; role: UserRole };
+  setCurrentUser?: React.Dispatch<React.SetStateAction<{ name: string; email: string; role: UserRole }>>;
   usersList: UserItem[];
   setUsersList: (users: UserItem[]) => void;
   operatorSessionLimit: number;
@@ -55,6 +56,7 @@ export interface UserManagerProps {
 
 export const UserManager: React.FC<UserManagerProps> = ({
   currentUser,
+  setCurrentUser,
   usersList,
   setUsersList,
   operatorSessionLimit,
@@ -511,6 +513,13 @@ export const UserManager: React.FC<UserManagerProps> = ({
                           : x
                       )
                     );
+                  }
+                  if (currentUser && currentUser.email.toLowerCase() === userToEdit.email.toLowerCase()) {
+                    setCurrentUser?.((prev) => ({
+                      ...prev,
+                      name: editName.trim(),
+                      role: editRole
+                    }));
                   }
                   setUserToEdit(null);
                 } catch (err) {

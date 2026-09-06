@@ -6,7 +6,7 @@
       "email": "anugrahtriplecycle@gmail.com",
       "role": "admin",
       "status": "Active",
-      "lastLogin": "2026-09-03T04:32:22.683Z",
+      "lastLogin": "2026-09-06T05:51:25.467Z",
       "isScheduleRestricted": false,
       "allowedStartDate": "2026-08-26",
       "allowedEndDate": "2026-08-31",
@@ -19,18 +19,18 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1788410072790
+      "lastSeen": 1788685316317
     },
     {
       "id": "USR-02",
-      "name": "caca",
+      "name": "Operator 1",
       "email": "dwimeliantiistiqomah55@gmail.com",
       "role": "operator",
       "status": "Active",
-      "lastLogin": "2026-08-31T09:01:56.252Z",
+      "lastLogin": "2026-09-06T03:15:18.859Z",
       "isScheduleRestricted": true,
-      "allowedStartDate": "2026-08-26",
-      "allowedEndDate": "2026-08-27",
+      "allowedStartDate": "2026-09-05",
+      "allowedEndDate": "2026-09-05",
       "allowedDays": [
         "Minggu",
         "Kamis",
@@ -39,11 +39,33 @@
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
       "lastSeen": 0
+    },
+    {
+      "id": "USR-03",
+      "name": "melvin",
+      "email": "dapilsatudys@gmail.com",
+      "role": "operator",
+      "status": "Active",
+      "lastLogin": "2026-09-05T07:50:18.428Z",
+      "isScheduleRestricted": true,
+      "allowedStartDate": "2026-09-05",
+      "allowedEndDate": "2026-09-05",
+      "allowedDays": [
+        "Senin",
+        "Selasa",
+        "Rabu",
+        "Kamis",
+        "Jumat"
+      ],
+      "allowedStartTime": "07:00",
+      "allowedEndTime": "22:00",
+      "lastSeen": 0
     }
   ],
   "passwords": {
-    "dwimeliantiistiqomah55@gmail.com": "GVwbSTbs",
+    "dwimeliantiistiqomah55@gmail.com": "Melchan5.",
     "admin@uad.ac.id": "admin123",
-    "anugrahtriplecycle@gmail.com": "gsxjGzxe"
+    "anugrahtriplecycle@gmail.com": "gsxjGzxe",
+    "dapilsatudys@gmail.com": "Coba123."
   }
 }

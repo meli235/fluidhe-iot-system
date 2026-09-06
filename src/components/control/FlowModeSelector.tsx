@@ -27,16 +27,24 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
           <label className="text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
             <Sliders className="w-4 h-4 text-sky-600 shrink-0" /> Pola Aliran Fluida (Flow Mode)
           </label>
+          <span className="text-[10px] font-extrabold bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full border border-sky-200">
+            Aktif: {isCounter ? 'Counter-Current' : 'Co-Current'}
+          </span>
         </div>
 
         {/* Large Prominent Soft Gradient Segmented Cards */}
-        <div id="tour-flow-mode" className="p-1.5 sm:p-2 bg-gradient-to-r from-slate-200/80 via-slate-100 to-slate-200/80 rounded-2xl sm:rounded-3xl border border-slate-300/70 shadow-inner grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+        <div id="tour-flow-mode" className={`p-1.5 sm:p-2 bg-gradient-to-r from-slate-200/80 via-slate-100 to-slate-200/80 rounded-2xl sm:rounded-3xl border border-slate-300/70 shadow-inner grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 ${disabled ? 'pointer-events-none select-none opacity-50' : ''}`}>
           {/* Co-Current */}
           <button
             type="button"
             disabled={disabled}
-            onClick={() => onSelectMode('CO-CURRENT', 'Co-Current')}
-            className={`py-3 px-3.5 sm:py-4 sm:px-5 rounded-xl sm:rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-center justify-between gap-2 sm:gap-3 ${
+            onClick={() => {
+              if (disabled) return;
+              onSelectMode('CO-CURRENT', 'Co-Current');
+            }}
+            className={`py-3 px-3.5 sm:py-4 sm:px-5 rounded-xl sm:rounded-2xl text-left transition-all duration-200 flex items-center justify-between gap-2 sm:gap-3 select-none ${
+              disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            } ${
               !isCounter
                 ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white shadow-lg shadow-sky-500/25 border border-sky-400/40 scale-[1.01]'
                 : 'bg-white/70 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/70 shadow-xs hover:shadow-sm'
@@ -76,8 +84,13 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
           <button
             type="button"
             disabled={disabled}
-            onClick={() => onSelectMode('COUNTER', 'Counter-Current')}
-            className={`py-3 px-3.5 sm:py-4 sm:px-5 rounded-xl sm:rounded-2xl text-left transition-all duration-200 cursor-pointer flex items-center justify-between gap-2 sm:gap-3 ${
+            onClick={() => {
+              if (disabled) return;
+              onSelectMode('COUNTER', 'Counter-Current');
+            }}
+            className={`py-3 px-3.5 sm:py-4 sm:px-5 rounded-xl sm:rounded-2xl text-left transition-all duration-200 flex items-center justify-between gap-2 sm:gap-3 select-none ${
+              disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            } ${
               isCounter
                 ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white shadow-lg shadow-sky-500/25 border border-sky-400/40 scale-[1.01]'
                 : 'bg-white/70 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/70 shadow-xs hover:shadow-sm'
@@ -98,7 +111,7 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
                   Counter-Current
                 </span>
                 <span className={`text-[10px] font-medium block mt-0.5 truncate ${isCounter ? 'text-sky-100' : 'text-slate-400'}`}>
-                  Fail-Safe Pasif
+                  Aliran Berlawanan
                 </span>
               </div>
             </div>
@@ -125,20 +138,29 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
           <Sliders className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600 shrink-0" />
           <span className="truncate">Arah Aliran Fluida (Flow Mode)</span>
         </label>
-        <span className="text-[9.5px] sm:text-[10px] text-slate-500 font-semibold shrink-0 whitespace-nowrap">
-          Status: <strong className="text-sky-700">{isCounter ? 'COUNTER' : 'CO-CURRENT'}</strong>
-        </span>
+        {disabled ? (
+          <span className="text-[9px] sm:text-[10px] font-extrabold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200 shrink-0">
+            Terkunci: Emergency Stop
+          </span>
+        ) : (
+          <span className="text-[9.5px] sm:text-[10px] text-slate-500 font-semibold shrink-0 whitespace-nowrap">
+            Status: <strong className="text-sky-700">{isCounter ? 'COUNTER' : 'CO-CURRENT'}</strong>
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 p-1 sm:p-1.5 bg-gradient-to-r from-slate-200/80 via-slate-100 to-slate-200/80 rounded-xl sm:rounded-2xl border border-slate-300/60 shadow-inner gap-1 sm:gap-1.5">
+      <div className={`grid grid-cols-2 p-1 sm:p-1.5 bg-gradient-to-r from-slate-200/80 via-slate-100 to-slate-200/80 rounded-xl sm:rounded-2xl border border-slate-300/60 shadow-inner gap-1 sm:gap-1.5 ${disabled ? 'pointer-events-none select-none opacity-50' : ''}`}>
         {/* Co-Current */}
         <button
           type="button"
-          onClick={() => onSelectMode('CO-CURRENT', 'Co-Current')}
+          onClick={() => {
+            if (disabled) return;
+            onSelectMode('CO-CURRENT', 'Co-Current');
+          }}
           disabled={disabled}
-          className={`py-2 sm:py-3 px-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${
+          className={`py-2 sm:py-3 px-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 select-none cursor-pointer ${
             !isCounter
-              ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20 border border-sky-400/40'
+              ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20 border border-sky-400/40 scale-[1.01]'
               : 'bg-white/70 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/60'
           }`}
         >
@@ -149,11 +171,14 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
         {/* Counter-Current */}
         <button
           type="button"
-          onClick={() => onSelectMode('COUNTER', 'Counter-Current')}
+          onClick={() => {
+            if (disabled) return;
+            onSelectMode('COUNTER', 'Counter-Current');
+          }}
           disabled={disabled}
-          className={`py-2 sm:py-3 px-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${
+          className={`py-2 sm:py-3 px-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all duration-200 flex items-center justify-center gap-1.5 sm:gap-2 select-none cursor-pointer ${
             isCounter
-              ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20 border border-sky-400/40'
+              ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20 border border-sky-400/40 scale-[1.01]'
               : 'bg-white/70 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/60'
           }`}
         >

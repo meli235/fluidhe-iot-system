@@ -7,6 +7,7 @@ import { UserManager } from './UserManager';
 
 export interface UsersTabProps {
   currentUser: { name: string; role: UserRole; email: string };
+  setCurrentUser?: React.Dispatch<React.SetStateAction<{ name: string; email: string; role: UserRole }>>;
   usersList: UserItem[];
   setUsersList: (users: UserItem[]) => void;
   operatorSessionLimit: number;
@@ -38,6 +39,7 @@ export interface UsersTabProps {
 
 export const UsersTab: React.FC<UsersTabProps> = ({
   currentUser,
+  setCurrentUser,
   usersList,
   setUsersList,
   operatorSessionLimit,
@@ -78,6 +80,7 @@ export const UsersTab: React.FC<UsersTabProps> = ({
         <div className="asklepios-card p-6 bg-white space-y-6">
           <UserManager
             currentUser={currentUser}
+            setCurrentUser={setCurrentUser}
             usersList={usersList}
             setUsersList={setUsersList}
             operatorSessionLimit={operatorSessionLimit}
