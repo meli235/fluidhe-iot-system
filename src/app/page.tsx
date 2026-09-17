@@ -1097,30 +1097,26 @@ export default function FluidHEDashboard() {
   const [isEditingCctvUrl, setIsEditingCctvUrl] = useState<boolean>(false);
   const [tempCctvUrl, setTempCctvUrl] = useState<string>('http://localhost:8889/stream.html?src=he_cctv');
 
-  // Auto-detect public tunnel URL from URL parameters (?cctv=... / ?tab=cctv) or localStorage
+  // Auto-detect public tunnel URL from URL parameters (?cctv=... / ?tab=cctv)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         const params = new URLSearchParams(window.location.search);
         const paramCctv = params.get('cctv');
         const paramTab = params.get('tab');
+        const host = window.location.hostname;
+        const isLocal = host === 'localhost' || host === '127.0.0.1';
 
-        if (paramCctv) {
+        if (isLocal) {
+          setCctvStreamSource('local');
+        } else if (paramCctv) {
           const clean = paramCctv.trim().replace(/\/+$/, '');
           setCctvPublicUrl(clean);
-          localStorage.setItem('cctv_public_url', clean);
-          setCctvIpUrl(`${clean}/stream.html?src=he_cctv&ngrok-skip-browser-warning=true`);
+          setCctvIpUrl(`${clean}/stream.html?src=he_cctv`);
           setCctvStreamSource('custom');
-        } else {
-          const stored = localStorage.getItem('cctv_public_url') || process.env.NEXT_PUBLIC_GO2RTC_URL || '';
-          if (stored) {
-            const clean = stored.trim().replace(/\/+$/, '');
-            setCctvPublicUrl(clean);
-            setCctvIpUrl(`${clean}/stream.html?src=he_cctv&ngrok-skip-browser-warning=true`);
-          }
         }
 
-        if (paramTab === 'cctv' || paramCctv) {
+        if (paramTab === 'cctv') {
           setActiveTab('cctv');
         }
       } catch (err) {
@@ -1774,20 +1770,19 @@ export default function FluidHEDashboard() {
 
       const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const isLocal = host === 'localhost' || host === '127.0.0.1';
 
       const endpoints: string[] = [];
+      // Jika diakses lokal, dahulukan selalu localhost:8889
+      if (isLocal) {
+        endpoints.push('http://localhost:8889/api/webrtc?src=he_cctv');
+      }
       if (cctvPublicUrl && cctvPublicUrl.trim().startsWith('http')) {
         endpoints.push(`${cctvPublicUrl.trim().replace(/\/+$/, '')}/api/webrtc?src=he_cctv`);
       }
-      if (!isHttps) {
-        if (host && host !== 'localhost' && host !== '127.0.0.1') {
-          endpoints.push(`http://${host}:8889/api/webrtc?src=he_cctv`);
-        }
+      if (!isLocal && !isHttps) {
+        endpoints.push(`http://${host}:8889/api/webrtc?src=he_cctv`);
         endpoints.push('http://localhost:8889/api/webrtc?src=he_cctv');
-      } else {
-        if (host === 'localhost' || host === '127.0.0.1') {
-          endpoints.push('http://localhost:8889/api/webrtc?src=he_cctv');
-        }
       }
 
       let resp: Response | null = null;
@@ -1796,8 +1791,7 @@ export default function FluidHEDashboard() {
           const r = await fetch(endpoint, {
             method: 'POST',
             headers: {
-              'Content-Type': 'text/plain',
-              'ngrok-skip-browser-warning': 'true'
+              'Content-Type': 'text/plain'
             },
             body: pc.localDescription?.sdp || offer.sdp,
           });
@@ -1809,7 +1803,7 @@ export default function FluidHEDashboard() {
       }
 
       if (!resp || !resp.ok) {
-        setWebrtcError('WebRTC belum tersambung. Anda dapat beralih ke Mode Cloud Web Player untuk siaran langsung stabil di HP.');
+        setWebrtcError('WebRTC belum tersambung. Pastikan go2rtc aktif atau beralih ke Mode Cloud Web Player.');
         setWebrtcConnected(false);
         return;
       }

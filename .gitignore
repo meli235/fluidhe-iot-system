@@ -38,6 +38,9 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# binaries
+scripts/cloudflared.exe
 next-env.d.ts
 
 # local records & scratch
