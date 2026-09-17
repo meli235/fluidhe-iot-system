@@ -781,7 +781,13 @@ export default function FluidHEDashboard() {
     'admin@uad.ac.id': 'admin123',
     'anugrahtriplecycle@gmail.com': 'admin123',
     'operator@uad.ac.id': 'operator123',
-    'dev@uad.ac.id': 'dev123'
+    'dev@uad.ac.id': 'dev123',
+    'admin.a@uad.ac.id': '1234.Admin',
+    'admin a': '1234.Admin',
+    'Admin A': '1234.Admin',
+    'operator.b@uad.ac.id': '123.Operator',
+    'operator b': '123.Operator',
+    'Operator B': '123.Operator'
   };
   const [userPasswords, setUserPasswords] = useState<Record<string, string>>(DEFAULT_PASSWORDS);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -2442,7 +2448,14 @@ export default function FluidHEDashboard() {
         ? 'operator123'
         : 'dev123';
 
-    const expectedPassword = (activePasswords[targetEmail] || userPasswords[targetEmail] || defaultFallback).trim();
+    const expectedPassword = (
+      activePasswords[targetEmail] ||
+      (found && activePasswords[found.name]) ||
+      (found && activePasswords[found.name.toLowerCase()]) ||
+      activePasswords[email] ||
+      userPasswords[targetEmail] ||
+      defaultFallback
+    ).trim();
     const enteredPassword = loginPassword.trim();
 
     // STRICT: Password match check

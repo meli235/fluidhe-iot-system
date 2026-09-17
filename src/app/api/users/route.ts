@@ -18,11 +18,35 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
       status: 'Active',
       lastLogin: 'Belum Pernah',
       isScheduleRestricted: false
+    },
+    {
+      id: 'USR-06',
+      name: 'Admin A',
+      email: 'admin.a@uad.ac.id',
+      role: 'admin',
+      status: 'Active',
+      lastLogin: 'Belum Pernah',
+      isScheduleRestricted: false
+    },
+    {
+      id: 'USR-07',
+      name: 'Operator B',
+      email: 'operator.b@uad.ac.id',
+      role: 'operator',
+      status: 'Active',
+      lastLogin: 'Belum Pernah',
+      isScheduleRestricted: false
     }
   ],
   passwords: {
     'anugrahtriplecycle@gmail.com': 'admin123',
-    'admin@uad.ac.id': 'admin123'
+    'admin@uad.ac.id': 'admin123',
+    'admin.a@uad.ac.id': '1234.Admin',
+    'Admin A': '1234.Admin',
+    'admin a': '1234.Admin',
+    'operator.b@uad.ac.id': '123.Operator',
+    'Operator B': '123.Operator',
+    'operator b': '123.Operator'
   }
 };
 
