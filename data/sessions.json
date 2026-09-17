@@ -1,6 +1,44 @@
 {
   "sessions": [
     {
+      "id": "SES-20260917-123201",
+      "title": "Praktikum Counter-Current - 12.31 WIB",
+      "date": "2026-09-17",
+      "startTime": "12.32.01",
+      "startTimeMs": 1789623121699,
+      "operatorName": "Admin Satu",
+      "operatorEmail": "anugrahtriplecycle@gmail.com",
+      "operatorRole": "admin",
+      "classGroup": "Admin Satu",
+      "pointsCount": 1,
+      "flowMode": "Counter-Current",
+      "data": [
+        {
+          "timestamp": "10.21.53",
+          "created_at": "2026-09-17T03:21:53.931+00:00",
+          "ti1": 38,
+          "ti2": 34.5,
+          "ti3": 29.5,
+          "ti4": 35,
+          "ti5": 32.3,
+          "ti6": 36.3,
+          "pi1": 7.06,
+          "pi2": 6.85,
+          "pi3": 6.81,
+          "pi4": 6.96,
+          "fc1": 8.41,
+          "fc2": 8.41,
+          "tc1Setpoint": 50,
+          "heater1Active": true,
+          "heater2Active": true,
+          "mode": "Counter-Current"
+        }
+      ],
+      "endTime": "12.32.45",
+      "endTimeMs": 1789623165633,
+      "durationSeconds": 26
+    },
+    {
       "id": "SES-20260917-095856",
       "title": "Praktikum IoT Counter-Current (STANDBY)",
       "date": "2026-09-17",

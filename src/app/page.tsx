@@ -1091,10 +1091,43 @@ export default function FluidHEDashboard() {
   // ─── REAL CCTV & IP CAMERA STATES (EZVIZ C6N FULL INTEGRATION) ───
   const [selectedCamera, setSelectedCamera] = useState<'cam1' | 'cam2' | 'cam3'>('cam1');
   const [cctvRecording, setCctvRecording] = useState<boolean>(true);
+  const [cctvPublicUrl, setCctvPublicUrl] = useState<string>('');
   const [cctvIpUrl, setCctvIpUrl] = useState<string>('http://localhost:8889/stream.html?src=he_cctv');
   const [cctvStreamSource, setCctvStreamSource] = useState<'local' | 'custom' | 'demo'>('local');
   const [isEditingCctvUrl, setIsEditingCctvUrl] = useState<boolean>(false);
   const [tempCctvUrl, setTempCctvUrl] = useState<string>('http://localhost:8889/stream.html?src=he_cctv');
+
+  // Auto-detect public tunnel URL from URL parameters (?cctv=... / ?tab=cctv) or localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const paramCctv = params.get('cctv');
+        const paramTab = params.get('tab');
+
+        if (paramCctv) {
+          const clean = paramCctv.trim().replace(/\/+$/, '');
+          setCctvPublicUrl(clean);
+          localStorage.setItem('cctv_public_url', clean);
+          setCctvIpUrl(`${clean}/stream.html?src=he_cctv&ngrok-skip-browser-warning=true`);
+          setCctvStreamSource('custom');
+        } else {
+          const stored = localStorage.getItem('cctv_public_url') || process.env.NEXT_PUBLIC_GO2RTC_URL || '';
+          if (stored) {
+            const clean = stored.trim().replace(/\/+$/, '');
+            setCctvPublicUrl(clean);
+            setCctvIpUrl(`${clean}/stream.html?src=he_cctv&ngrok-skip-browser-warning=true`);
+          }
+        }
+
+        if (paramTab === 'cctv' || paramCctv) {
+          setActiveTab('cctv');
+        }
+      } catch (err) {
+        console.warn('CCTV Param parse notice:', err);
+      }
+    }
+  }, []);
 
   // EZVIZ Mobile App Style Controls
   const [cctvAudioMuted, setCctvAudioMuted] = useState<boolean>(false);
@@ -1739,28 +1772,44 @@ export default function FluidHEDashboard() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      let resp: Response | null = null;
-      try {
-        resp = await fetch(`http://${host}:8889/api/webrtc?src=he_cctv`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: pc.localDescription?.sdp || offer.sdp,
-        });
-      } catch (fErr) {
-        if (host !== 'localhost') {
-          try {
-            resp = await fetch('http://localhost:8889/api/webrtc?src=he_cctv', {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain' },
-              body: pc.localDescription?.sdp || offer.sdp,
-            });
-          } catch (ignored) { }
+
+      const endpoints: string[] = [];
+      if (cctvPublicUrl && cctvPublicUrl.trim().startsWith('http')) {
+        endpoints.push(`${cctvPublicUrl.trim().replace(/\/+$/, '')}/api/webrtc?src=he_cctv`);
+      }
+      if (!isHttps) {
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          endpoints.push(`http://${host}:8889/api/webrtc?src=he_cctv`);
+        }
+        endpoints.push('http://localhost:8889/api/webrtc?src=he_cctv');
+      } else {
+        if (host === 'localhost' || host === '127.0.0.1') {
+          endpoints.push('http://localhost:8889/api/webrtc?src=he_cctv');
         }
       }
 
+      let resp: Response | null = null;
+      for (const endpoint of endpoints) {
+        try {
+          const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: pc.localDescription?.sdp || offer.sdp,
+          });
+          if (r && r.ok) {
+            resp = r;
+            break;
+          }
+        } catch (ignored) { }
+      }
+
       if (!resp || !resp.ok) {
-        setWebrtcError('Kamera CCTV offline / Gagal menyambung go2rtc');
+        setWebrtcError('WebRTC belum tersambung. Anda dapat beralih ke Mode Cloud Web Player untuk siaran langsung stabil di HP.');
         setWebrtcConnected(false);
         return;
       }
@@ -3252,6 +3301,23 @@ export default function FluidHEDashboard() {
               </div>
               Alarm System
             </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('cctv');
+                setIsSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'cctv'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Video className="w-4 h-4 shrink-0" />
+                <span className="truncate">CCTV Feed</span>
+              </div>
+              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-extrabold border border-emerald-200 shrink-0">Live</span>
+            </button>
           </nav>
 
           {currentUser.role === 'admin' && (
@@ -3273,23 +3339,6 @@ export default function FluidHEDashboard() {
                 <div className="flex items-center gap-3 min-w-0">
                   <FolderKanban className="w-4 h-4 shrink-0" />
                   <span className="truncate whitespace-nowrap">Data Praktikum</span>
-                </div>
-                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab('cctv');
-                  setIsSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'cctv'
-                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Video className="w-4 h-4 shrink-0" />
-                  <span className="truncate">CCTV Feed</span>
                 </div>
                 <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
               </button>
@@ -3814,14 +3863,17 @@ export default function FluidHEDashboard() {
             </div>
           )}
 
-          {/* TAB 3: CCTV LIVE MONITORING (ADMIN ONLY) */}
-          {activeTab === 'cctv' && currentUser.role === 'admin' && (
+          {/* TAB 3: CCTV LIVE MONITORING (ADMIN & OPERATOR / CLIENT) */}
+          {activeTab === 'cctv' && (
             <CctvTab
               selectedCamera={selectedCamera}
               setSelectedCamera={setSelectedCamera}
               cctvStreamSource={cctvStreamSource}
               setCctvStreamSource={setCctvStreamSource}
               cctvIpUrl={cctvIpUrl}
+              setCctvIpUrl={setCctvIpUrl}
+              cctvPublicUrl={cctvPublicUrl}
+              setCctvPublicUrl={setCctvPublicUrl}
               cctvAudioMuted={cctvAudioMuted}
               setCctvAudioMuted={setCctvAudioMuted}
               audioUserActivated={audioUserActivated}
@@ -4290,6 +4342,21 @@ export default function FluidHEDashboard() {
             <span className="text-[10px]">Laporan</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('cctv');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'cctv'
+              ? 'text-sky-600 font-extrabold bg-sky-50/80'
+              : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+              }`}
+          >
+            <Video className="w-5 h-5 shrink-0" />
+            <span className="text-[10px]">CCTV</span>
+          </button>
+
           {currentUser.role === 'admin' ? (
             <>
               <button
@@ -4305,21 +4372,6 @@ export default function FluidHEDashboard() {
               >
                 <FolderKanban className="w-5 h-5 shrink-0" />
                 <span className="text-[10px]">Data Lab</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('cctv');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'cctv'
-                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
-                  : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-                  }`}
-              >
-                <Video className="w-5 h-5 shrink-0" />
-                <span className="text-[10px]">CCTV</span>
               </button>
 
               <button
