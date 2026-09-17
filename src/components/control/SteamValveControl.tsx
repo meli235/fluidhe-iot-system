@@ -73,19 +73,20 @@ export const SteamValveControl: React.FC<SteamValveControlProps> = ({
           <button
             type="button"
             onClick={() => onToggleUapManual(!uapStatus)}
-            disabled={emergencyStopped || isAuto}
-            className={`w-full py-2 min-h-[38px] rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs ${
-              isAuto
-                ? 'bg-slate-800 text-white opacity-90 cursor-not-allowed'
-                : uapStatus
-                ? 'bg-slate-900 text-white hover:bg-slate-800 active:scale-98'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 active:scale-98'
+            disabled={emergencyStopped}
+            className={`w-full py-2 min-h-[38px] rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98 ${
+              uapStatus
+                ? 'bg-slate-900 text-white hover:bg-slate-800'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
             }`}
           >
-            <Power className="w-3.5 h-3.5" />
-            {isAuto
-              ? (uapStatus ? 'Sedang Membuka (Auto)' : 'Normal Tertutup (Auto)')
-              : (uapStatus ? 'Tutup Katup Uap' : 'Buka Katup Uap')}
+            <Power className="w-3.5 h-3.5 text-rose-500" />
+            <span>{uapStatus ? 'Tutup Katup Uap' : 'Buka Katup Uap'}</span>
+            {isAuto && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200">
+                Override Manual
+              </span>
+            )}
           </button>
         </div>
 
@@ -130,7 +131,7 @@ export const SteamValveControl: React.FC<SteamValveControlProps> = ({
       </div>
 
       <p className="text-[10px] text-slate-500 font-medium px-0.5">
-        *Mode AUTO: Katup uap membuka periodik setiap {uapIntervalMin} menit untuk regulasi tekanan.
+        *Mode AUTO: Katup uap membuka periodik setiap {uapIntervalMin} menit. Kontrol manual dapat digunakan kapan saja (override on-demand).
       </p>
     </div>
   );

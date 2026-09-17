@@ -344,6 +344,18 @@ export default function FluidHEDashboard() {
   const [primingNotice, setPrimingNotice] = useState<string | null>(null);
   const [heatingTimerSeconds, setHeatingTimerSeconds] = useState<number>(0);
   const [show1MinWarning, setShow1MinWarning] = useState<boolean>(false);
+  const [isCriticalWarningDismissed, setIsCriticalWarningDismissed] = useState<boolean>(false);
+
+  // Reset status dismiss jika parameter tekanan & suhu telah normal kembali
+  useEffect(() => {
+    const isCritical = Boolean(
+      supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
+      (supabaseTelemetry && (supabaseTelemetry.pressure > 2.0 || supabaseTelemetry.temp_1 > 65.0 || supabaseTelemetry.temp_2 > 65.0))
+    );
+    if (!isCritical) {
+      setIsCriticalWarningDismissed(false);
+    }
+  }, [supabaseTelemetry?.warning_status, supabaseTelemetry?.pressure, supabaseTelemetry?.temp_1, supabaseTelemetry?.temp_2]);
 
   // ─── ALARM THRESHOLDS & AUDIO ───
   const [ti1MaxThreshold, setTi1MaxThreshold] = useState<number>(75.0);
@@ -3372,6 +3384,7 @@ export default function FluidHEDashboard() {
           {/* SAFETY / WARNING BANNERS (HANYA MUNCUL DI TAB MONITORING AKTIF & TIDAK MUNCUL DI LAPORAN / PRINT) */}
           {/* 🚨 CRITICAL WARNING SYSTEM POP-UP BANNER (WARN_BKA_UAP / PRESSURE & TEMP ALERT) */}
           {(activeTab === 'dashboard' || activeTab === 'control') &&
+            !isCriticalWarningDismissed &&
             (supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
             (supabaseTelemetry && (supabaseTelemetry.pressure > 2.0 || supabaseTelemetry.temp_1 > 65.0 || supabaseTelemetry.temp_2 > 65.0))) && (
               <div className="no-print print:hidden p-4 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white border-2 border-red-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-red-600/30 animate-pulse">
@@ -3380,25 +3393,54 @@ export default function FluidHEDashboard() {
                     <AlertTriangle className="w-7 h-7 text-white animate-bounce" />
                   </div>
                   <div>
-                    <h4 className="font-black text-sm sm:text-base text-white tracking-wide uppercase">
+                    <h4 className="font-black text-sm sm:text-base text-white tracking-wide uppercase flex items-center gap-2 flex-wrap">
                       PERINGATAN BAHAYA: Tekanan atau Suhu Kritis!
+                      {supabaseControls.uap_status && (
+                        <span className="text-[10px] font-black bg-emerald-500 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          Katup Uap Aktif Terbuka
+                        </span>
+                      )}
                     </h4>
                     <p className="text-xs text-red-100 font-medium mt-0.5">
-                      Harap Buka Katup Uap Sekarang! Tekanan terdeteksi &gt; 2.0 Bar atau Suhu &gt; 65°C.
+                      {supabaseControls.uap_status
+                        ? 'Katup uap telah dibuka untuk membuang tekanan & uap panas. Pantau penurunan sensor.'
+                        : 'Harap Buka Katup Uap Sekarang! Tekanan terdeteksi > 2.0 Bar atau Suhu > 65°C.'}
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleUapStatusToggle(true);
-                    triggerSyncFeedback('Katup Uap', 'DIBUKA (DARURAT BAHAYA)');
-                  }}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-red-50 text-red-700 rounded-xl text-xs font-black shadow-lg transition active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer border border-red-200"
-                >
-                  <Power className="w-4 h-4 text-red-600" />
-                  BUKA KATUP UAP SEKARANG
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                  {!supabaseControls.uap_status ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleUapStatusToggle(true);
+                        triggerSyncFeedback('Katup Uap', 'DIBUKA (DARURAT BAHAYA)');
+                        setIsCriticalWarningDismissed(true);
+                      }}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-red-50 text-red-700 rounded-xl text-xs font-black shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer border border-red-200"
+                    >
+                      <Power className="w-4 h-4 text-red-600" />
+                      BUKA KATUP UAP SEKARANG
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsCriticalWarningDismissed(true)}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer border border-emerald-400"
+                    >
+                      <Check className="w-4 h-4" />
+                      TUTUP NOTIFIKASI
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    title="Tutup Peringatan"
+                    onClick={() => setIsCriticalWarningDismissed(true)}
+                    className="p-2 hover:bg-white/20 rounded-xl text-white/90 hover:text-white transition cursor-pointer shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -3719,11 +3761,7 @@ export default function FluidHEDashboard() {
                       {/* 2. Katup Solenoid Uap (TENGAH) */}
                       <SteamValveControl
                         controlMode={supabaseControls.control_mode}
-                        uapStatus={
-                          (latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0)
-                            ? true
-                            : (supabaseControls.uap_status ?? false)
-                        }
+                        uapStatus={supabaseControls.uap_status ?? false}
                         uapAutoStatus={supabaseControls.control_mode === 'AUTO' ? true : (supabaseControls.uap_auto_status ?? false)}
                         uapIntervalMin={supabaseControls.uap_interval_min ?? 5}
                         emergencyStopped={emergencyStopped}
@@ -3786,21 +3824,20 @@ export default function FluidHEDashboard() {
                                   handleAirDinginToggle(nextVal);
                                   triggerSyncFeedback('Katup Air Dingin', nextVal ? 'DIBUKA' : 'DITUTUP');
                                 }}
-                                disabled={emergencyStopped || supabaseControls.control_mode === 'AUTO'}
-                                className={`w-full py-2 min-h-[38px] rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs ${
-                                  supabaseControls.control_mode === 'AUTO'
-                                    ? 'bg-slate-800 text-white opacity-90 cursor-not-allowed'
-                                    : supabaseControls.air_dingin
-                                    ? 'bg-slate-900 text-white hover:bg-slate-800 active:scale-98'
-                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 active:scale-98'
+                                disabled={emergencyStopped}
+                                className={`w-full py-2 min-h-[38px] rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98 ${
+                                  supabaseControls.air_dingin
+                                    ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                                 }`}
                               >
-                                <Power className="w-3.5 h-3.5" />
-                                {supabaseControls.control_mode === 'AUTO'
-                                  ? 'Solenoid Terbuka (AUTO)'
-                                  : supabaseControls.air_dingin
-                                  ? 'Tutup Katup Air Dingin'
-                                  : 'Buka Katup Air Dingin'}
+                                <Power className="w-3.5 h-3.5 text-sky-500" />
+                                <span>{supabaseControls.air_dingin ? 'Tutup Katup Dingin' : 'Buka Katup Dingin'}</span>
+                                {supabaseControls.control_mode === 'AUTO' && (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200">
+                                    Override Manual
+                                  </span>
+                                )}
                               </button>
                             </div>
 
