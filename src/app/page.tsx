@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { uploadToCloud } from '@/lib/supabase-upload';
 import { uploadToDrive } from '@/lib/drive-upload';
@@ -44,6 +44,7 @@ import {
   Pause,
   Maximize2,
   Folder,
+  FolderKanban,
   Volume2,
   VolumeX,
   X,
@@ -95,29 +96,47 @@ import {
 } from '@/components/dashboard';
 import {
   HeaterControl,
+  DualHeatersControl,
   FlowModeSelector,
   ServoControl,
   TargetTempSlider,
   SteamValveControl,
-  FlowAndValvesControl
+  FlowAndValvesControl,
+  PumpControl
 } from '@/components/control';
+import {
+  SystemStatusBadge,
+  SystemStandbyScreen,
+  SystemStartupModal,
+  SessionSummaryModal,
+  LogoutConfirmModal
+} from '@/components/system';
 import { LoginScreen } from '@/components/auth';
 import { CctvTab } from '@/components/cctv';
 import { LogsTab } from '@/components/logs';
 import { AlarmsTab } from '@/components/alarms';
 import { UsersTab } from '@/components/users';
+import { SessionManagerTab } from '@/components/sessions';
 import {
   calculateLMTD,
   calculateAutoControlParameters,
   calculatePressureDrop
 } from '@/lib/calculations';
 import {
+  exportSessionToExcel,
+  exportMasterAllClassesExcel
+} from '@/lib/excel-export';
+import {
   UserRole,
   UserItem,
   TelemetryPoint,
   AlarmEvent,
-  FlowMode
+  FlowMode,
+  SystemOperationalStatus,
+  SystemSession,
+  ControlMode
 } from '@/types';
+
 
 
 
@@ -140,6 +159,7 @@ export default function FluidHEDashboard() {
     handleHeater1PowerToggle,
     handleHeater2PowerToggle,
     handleTargetTempChange,
+    handleThermostatLimitsChange,
     handleServoAngleChange,
     handleValve1Change,
     handleValve2Change,
@@ -148,7 +168,12 @@ export default function FluidHEDashboard() {
     handleUapAutoToggle,
     handleUapIntervalChange,
     handleAirDinginToggle,
-    handleStepButtonPress
+    handlePompaToggle,
+    handleStepButtonPress,
+    handleSystemStart,
+    handleSystemShutdown,
+    handleEmergencyShutdown,
+    handleTriggerPowerPush
   } = useSupabaseIntegration();
 
   // Dynamic Temperature Labels based on Active flow_mode ("COUNTER" vs "CO-CURRENT")
@@ -156,17 +181,17 @@ export default function FluidHEDashboard() {
     const isCounter = (supabaseControls?.flow_mode || 'COUNTER') === 'COUNTER';
     if (isCounter) {
       return {
-        t1: 'Termostat 1 (TI1 Hot In)',
-        t2: 'Termostat 2 (TI2 Hot Out)',
-        t3: 'Termostat 3 (TI3 Cold In)',
-        t4: 'Termostat 4 (TI4 Cold Out)',
+        t1: 'Termostat T1 (Hot In)',
+        t2: 'Termostat T2 (Cold Out)',
+        t3: 'Termostat T3 (Cold In)',
+        t4: 'Termostat T4 (Hot Out)',
       };
     } else {
       return {
-        t1: 'Termostat 1 (TI1 Hot Out)',
-        t2: 'Termostat 2 (TI2 Hot In)',
-        t3: 'Termostat 3 (TI3 Cold Out)',
-        t4: 'Termostat 4 (TI4 Cold In)',
+        t1: 'Termostat T1 (Hot Out)',
+        t2: 'Termostat T2 (Cold Out)',
+        t3: 'Termostat T3 (Cold In)',
+        t4: 'Termostat T4 (Hot In)',
       };
     }
   }, [supabaseControls?.flow_mode]);
@@ -176,6 +201,18 @@ export default function FluidHEDashboard() {
       setOperationMode(supabaseControls.flow_mode === 'CO-CURRENT' ? 'Co-Current' : 'Counter-Current');
     }
   }, [supabaseControls?.flow_mode]);
+
+  useEffect(() => {
+    if (supabaseControls?.servo_angle !== undefined) {
+      setFc1Valve(supabaseControls.servo_angle);
+    }
+  }, [supabaseControls?.servo_angle]);
+
+  useEffect(() => {
+    if (supabaseControls?.servo_angle_2 !== undefined) {
+      setFc2Valve(supabaseControls.servo_angle_2);
+    }
+  }, [supabaseControls?.servo_angle_2]);
 
   const [inputAnonKey, setInputAnonKey] = useState<string>('');
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
@@ -233,7 +270,10 @@ export default function FluidHEDashboard() {
   };
 
 
-  // ─── AUTH & ROLE STATE ───
+  // ─── CLIENT HYDRATION MOUNT SHIELD ───
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+
+  // ─── AUTH & ROLE STATE (PERSISTENT ACROSS PAGE REFRESH) ───
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: UserRole }>({
     name: '',
@@ -244,8 +284,16 @@ export default function FluidHEDashboard() {
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [selectedDemoRole, setSelectedDemoRole] = useState<UserRole>('operator');
 
-  // ─── NAVIGATION & TOUR STATE ───
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'control' | 'cctv' | 'cctv-history' | 'logs' | 'alarms' | 'users'>('dashboard');
+  // ─── NAVIGATION & TOUR STATE (PERSISTENT ACTIVE TAB) ───
+  const [activeTab, setActiveTabState] = useState<'dashboard' | 'control' | 'cctv' | 'cctv-history' | 'logs' | 'alarms' | 'users' | 'sessions'>('dashboard');
+
+  const setActiveTab = useCallback((tab: 'dashboard' | 'control' | 'cctv' | 'cctv-history' | 'logs' | 'alarms' | 'users' | 'sessions') => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem('fluidhe_active_tab', tab);
+    } catch (e) {}
+  }, []);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isTourOpen, setIsTourOpen] = useState<boolean>(false);
   const [isCloudDriveModalOpen, setIsCloudDriveModalOpen] = useState<boolean>(false);
@@ -287,8 +335,8 @@ export default function FluidHEDashboard() {
   // ─── CONTROL STATES ───
   const [heaterMasterPower, setHeaterMasterPower] = useState<boolean>(true);
   const [tc1Setpoint, setTc1Setpoint] = useState<number>(65); // 30 - 90 °C
-  const [fc1Valve, setFc1Valve] = useState<number>(75); // 0 - 100 % (Hot Valve)
-  const [fc2Valve, setFc2Valve] = useState<number>(60); // 0 - 100 % (Cold Valve)
+  const [fc1Valve, setFc1Valve] = useState<number>(100); // 0 - 100 % (Hot Valve)
+  const [fc2Valve, setFc2Valve] = useState<number>(100); // 0 - 100 % (Cold Valve)
   const [operationMode, setOperationMode] = useState<'Counter-Current' | 'Co-Current'>('Counter-Current');
   const [emergencyStopped, setEmergencyStopped] = useState<boolean>(false);
 
@@ -305,6 +353,378 @@ export default function FluidHEDashboard() {
 
   // ─── DATA & HISTORY STATES ───
   const [telemetryHistory, setTelemetryHistory] = useState<TelemetryPoint[]>([]);
+
+  // ─── SYSTEM OPERATIONAL READINESS & SESSION LIFECYCLE (ANTI-DATA TERCAMPUR) ───
+  const [systemState, setSystemState] = useState<SystemOperationalStatus>('OFF');
+  const [currentSession, setCurrentSession] = useState<SystemSession | null>(null);
+  const [archivedSessions, setArchivedSessions] = useState<SystemSession[]>([]);
+  const [sessionDuration, setSessionDuration] = useState<number>(0);
+  const [isStartupModalOpen, setIsStartupModalOpen] = useState<boolean>(false);
+  const [isEndSessionModalOpen, setIsEndSessionModalOpen] = useState<boolean>(false);
+  const [isLogoutConfirmModalOpen, setIsLogoutConfirmModalOpen] = useState<boolean>(false);
+  const [isLoggingOutWithShutdown, setIsLoggingOutWithShutdown] = useState<boolean>(false);
+  const [selectedLogsSessionId, setSelectedLogsSessionId] = useState<string>('CURRENT');
+
+  // Role-based Master Classes Filtering (Admin can view all classes or filter per class)
+  const [classFilter, setClassFilter] = useState<string>('ALL');
+  const [classesList, setClassesList] = useState<Array<{ operatorEmail: string; operatorName: string; classGroup?: string; count: number }>>([]);
+
+  // Fetch role-isolated sessions from server (Server Master Database)
+  const fetchSessions = useCallback(async (role: string, email: string, classFilterVal?: string) => {
+    try {
+      const q = new URLSearchParams({
+        role: role || 'operator',
+        email: email || '',
+        classFilter: classFilterVal || 'ALL'
+      });
+      const res = await fetch(`/api/sessions?${q.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.sessions)) {
+        setArchivedSessions(data.sessions);
+        if (data.classesList) {
+          setClassesList(data.classesList);
+        }
+
+        // Jika user memilih filter kelas spesifik, langsung pilih sesi pertama dari kelas tersebut
+        if (classFilterVal && classFilterVal !== 'ALL') {
+          if (data.sessions.length > 0) {
+            setSelectedLogsSessionId(data.sessions[0].id);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch sessions from server:', err);
+    }
+  }, []);
+
+  // Sync sessions whenever user identity or classFilter changes
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.email) {
+      fetchSessions(currentUser.role, currentUser.email, classFilter);
+    }
+  }, [isLoggedIn, currentUser?.email, currentUser?.role, classFilter, fetchSessions]);
+
+  // ─── RESTORE RUNNING SESSION & AUTH ON PAGE LOAD (ANTI KELUAR / ANTI DATA HILANG SAAT REFRESH) ───
+  useEffect(() => {
+    try {
+      // 1. Sinkronkan status autentikasi dari localStorage (mencegah kembali ke login saat reload)
+      const savedAuth = localStorage.getItem('fluidhe_auth_user');
+      const savedIsLoggedIn = localStorage.getItem('fluidhe_is_logged_in');
+      if (savedIsLoggedIn === 'true' && savedAuth) {
+        try {
+          const parsedUser = JSON.parse(savedAuth);
+          if (parsedUser?.email) {
+            setCurrentUser(parsedUser);
+            setIsLoggedIn(true);
+          }
+        } catch (e) {}
+      }
+
+      // 2. Pulihkan tab aktif terakhir
+      const savedTab = localStorage.getItem('fluidhe_active_tab') as any;
+      if (savedTab && ['dashboard', 'control', 'cctv', 'cctv-history', 'logs', 'alarms', 'users', 'sessions'].includes(savedTab)) {
+        setActiveTabState(savedTab);
+      }
+
+      // 3. Pulihkan sesi pengukuran yang sedang berjalan (jika belum diselesaikan)
+      const savedState = localStorage.getItem('fluidhe_system_state') as SystemOperationalStatus | null;
+      const savedSessionRaw = localStorage.getItem('fluidhe_current_session');
+
+      if (savedState === 'ACTIVE' && savedSessionRaw) {
+        try {
+          const parsedSession: SystemSession = JSON.parse(savedSessionRaw);
+          if (parsedSession && parsedSession.id) {
+            setCurrentSession(parsedSession);
+            setSystemState('ACTIVE');
+
+            // Hitung durasi akumulatif yang akurat berdasarkan waktu mulai sesi
+            if (parsedSession.startTimeMs) {
+              const elapsedSec = Math.max(0, Math.floor((Date.now() - parsedSession.startTimeMs) / 1000));
+              setSessionDuration(elapsedSec);
+            }
+
+            // Pulihkan riwayat telemetri sesi aktif ke chart
+            if (parsedSession.data && parsedSession.data.length > 0) {
+              setTelemetryHistory(parsedSession.data.slice(-50));
+            }
+          }
+        } catch (err) {
+          console.warn('Gagal memulihkan sesi aktif dari localStorage:', err);
+        }
+      } else {
+        setSystemState('OFF');
+        setCurrentSession(null);
+        setSessionDuration(0);
+      }
+
+      // 4. Pulihkan konfigurasi threshold alarm & audio dari localStorage
+      const savedTi1Threshold = localStorage.getItem('fluidhe_ti1_max_threshold');
+      if (savedTi1Threshold) {
+        const val = parseFloat(savedTi1Threshold);
+        if (!isNaN(val) && val > 0) {
+          setTi1MaxThreshold(val);
+        }
+      }
+
+      const savedDpThreshold = localStorage.getItem('fluidhe_deltap_max_threshold');
+      if (savedDpThreshold) {
+        const val = parseFloat(savedDpThreshold);
+        if (!isNaN(val) && val > 0) {
+          setDeltaPMaxThreshold(val);
+        }
+      }
+
+      const savedSound = localStorage.getItem('fluidhe_sound_enabled');
+      if (savedSound !== null) {
+        setSoundEnabled(savedSound === 'true');
+      }
+    } catch (err) {
+      console.warn('Could not initialize system session state:', err);
+    } finally {
+      setIsMounted(true);
+    }
+  }, []);
+
+  // ─── AUTO-SAVE ALARM THRESHOLDS & SETTINGS TO LOCALSTORAGE ───
+  useEffect(() => {
+    if (isMounted) {
+      try {
+        localStorage.setItem('fluidhe_ti1_max_threshold', String(ti1MaxThreshold));
+      } catch (e) {}
+    }
+  }, [ti1MaxThreshold, isMounted]);
+
+  useEffect(() => {
+    if (isMounted) {
+      try {
+        localStorage.setItem('fluidhe_deltap_max_threshold', String(deltaPMaxThreshold));
+      } catch (e) {}
+    }
+  }, [deltaPMaxThreshold, isMounted]);
+
+  useEffect(() => {
+    if (isMounted) {
+      try {
+        localStorage.setItem('fluidhe_sound_enabled', String(soundEnabled));
+      } catch (e) {}
+    }
+  }, [soundEnabled, isMounted]);
+
+  // ─── LIVE SESSION DURATION TICKER ───
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (systemState === 'ACTIVE' && currentSession) {
+      timer = setInterval(() => {
+        setSessionDuration((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [systemState, currentSession]);
+
+  // ─── HARDWARE / IOT SUPABASE SYSTEM STATE SYNCHRONIZATION ───
+  useEffect(() => {
+    if (!supabaseControls) return;
+    const mode = supabaseControls.control_mode;
+    const isActuatorActive = Boolean(
+      supabaseControls.heater_status ||
+      supabaseControls.heater_1_status ||
+      supabaseControls.heater_2_status ||
+      supabaseControls.btn_onoff
+    );
+    // Sistem IoT hardware dianggap aktif jika mode AUTO/MANUAL/KALIBRASI atau ada aktuator heater ON
+    const isIotActive = (mode === 'AUTO' || mode === 'MANUAL' || mode === 'KALIBRASI') || isActuatorActive;
+
+    if (isIotActive) {
+      if (systemState !== 'ACTIVE') {
+        setSystemState('ACTIVE');
+        try {
+          localStorage.setItem('fluidhe_system_state', 'ACTIVE');
+        } catch (e) {}
+
+        // Buat atau pulihkan wadah sesi jika belum ada
+        setCurrentSession((prev) => {
+          if (prev) return prev;
+          const now = new Date();
+          const dateStr = now.toISOString().slice(0, 10);
+          const timeStr = now.toLocaleTimeString('id-ID');
+          const timeCompact = now.toTimeString().slice(0, 8).replace(/:/g, '');
+          const flow = supabaseControls.flow_mode === 'CO-CURRENT' ? 'Co-Current' : 'Counter-Current';
+          const autoSession: SystemSession = {
+            id: `SES-${dateStr.replace(/-/g, '')}-${timeCompact}`,
+            title: `Praktikum IoT ${flow} (${mode || 'AUTO'})`,
+            date: dateStr,
+            startTime: timeStr,
+            startTimeMs: Date.now(),
+            operatorName: currentUser?.name || 'Operator',
+            operatorEmail: currentUser?.email,
+            operatorRole: currentUser?.role,
+            classGroup: currentUser?.name,
+            pointsCount: 0,
+            flowMode: flow,
+            data: []
+          };
+          try {
+            localStorage.setItem('fluidhe_current_session', JSON.stringify(autoSession));
+          } catch (e) {}
+          return autoSession;
+        });
+      }
+    } else if (mode === 'SHUTDOWN' || mode === 'STANDBY') {
+      if (systemState === 'ACTIVE' || systemState === 'STOPPING') {
+        setSystemState('OFF');
+        try {
+          localStorage.setItem('fluidhe_system_state', 'OFF');
+        } catch (e) {}
+      }
+    }
+  }, [
+    supabaseControls?.control_mode,
+    supabaseControls?.heater_status,
+    supabaseControls?.heater_1_status,
+    supabaseControls?.heater_2_status,
+    supabaseControls?.btn_onoff,
+    supabaseControls?.flow_mode,
+    systemState,
+    currentUser
+  ]);
+
+  // ─── CONFIRM SYSTEM STARTUP (INITIALIZE SESSION & HARDWARE) ───
+  const handleConfirmStartup = async (sessionTitle: string, mode: ControlMode = 'AUTO') => {
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toLocaleTimeString('id-ID');
+    const timeCompact = now.toTimeString().slice(0, 8).replace(/:/g, '');
+    const newSessionId = `SES-${dateStr.replace(/-/g, '')}-${timeCompact}`;
+
+    const newSession: SystemSession = {
+      id: newSessionId,
+      title: sessionTitle || `Praktikum ${operationMode}`,
+      date: dateStr,
+      startTime: timeStr,
+      startTimeMs: Date.now(),
+      operatorName: currentUser?.name || 'Operator',
+      operatorEmail: currentUser?.email,
+      operatorRole: currentUser?.role,
+      classGroup: currentUser?.name,
+      pointsCount: 0,
+      flowMode: operationMode,
+      data: []
+    };
+
+    setCurrentSession(newSession);
+    setSystemState('ACTIVE');
+    setSessionDuration(0);
+    setSelectedLogsSessionId('CURRENT');
+    setIsStartupModalOpen(false);
+
+    try {
+      localStorage.setItem('fluidhe_system_state', 'ACTIVE');
+      localStorage.setItem('fluidhe_current_session', JSON.stringify(newSession));
+    } catch (e) {}
+
+    // Kirim perintah aktifasi serentak ke database & ESP32
+    await handleSystemStart(mode);
+
+    triggerSyncFeedback('Sistem Dihidupkan', `Mode ${mode} Aktif - Sinyal Terkirim ke ESP32`);
+  };
+
+  // ─── CONFIRM SYSTEM SHUTDOWN (SAFE SHUTDOWN & ARCHIVE SESSION) ───
+  const handleConfirmEndSession = async () => {
+    setSystemState('STOPPING');
+    setIsEndSessionModalOpen(false);
+
+    // 1. Matikan pemanas & aktuator secara aman via siklus SHUTDOWN ke ESP32
+    setHeaterMasterPower(false);
+    await handleSystemShutdown();
+
+    // 2. Arsipkan sesi praktikum
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const finalSession: SystemSession | null = currentSession
+      ? {
+          ...currentSession,
+          endTime: now.toLocaleTimeString('id-ID'),
+          endTimeMs: Date.now(),
+          durationSeconds: sessionDuration,
+          pointsCount: currentSession.data.length
+        }
+      : null;
+
+    if (finalSession) {
+      setArchivedSessions((prev) => {
+        const updated = [finalSession, ...prev.filter((s) => s.id !== finalSession.id)];
+        return updated;
+      });
+
+      // Simpan permanen ke server backend master (data/sessions.json)
+      try {
+        await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: finalSession })
+        });
+        if (currentUser?.email) {
+          fetchSessions(currentUser.role, currentUser.email, classFilter);
+        }
+      } catch (err) {
+        console.error('Gagal menyimpan sesi ke server master:', err);
+      }
+    }
+
+    setCurrentSession(null);
+    setSessionDuration(0);
+    try {
+      localStorage.setItem('fluidhe_system_state', 'OFF');
+      localStorage.removeItem('fluidhe_current_session');
+    } catch (e) {}
+
+    setTimeout(() => {
+      setSystemState('OFF');
+      triggerSyncFeedback('Sistem Dimatikan', 'Shutdown Berhasil - Sesi Tersimpan Permanen di Server');
+    }, 1200);
+  };
+
+  // ─── EXPORT CURRENT SESSION EXCEL HANDLER ───
+  const handleExportCurrentSessionExcel = () => {
+    const sessionToExport = (selectedLogsSessionId === 'CURRENT' && currentSession)
+      ? currentSession
+      : archivedSessions.find((s) => s.id === selectedLogsSessionId) || currentSession;
+
+    if (!sessionToExport || !sessionToExport.data || sessionToExport.data.length === 0) {
+      triggerCctvToast('Tidak ada data telemetri pada sesi ini untuk diekspor', 'warning');
+      return;
+    }
+
+    try {
+      const { fileName } = exportSessionToExcel(sessionToExport);
+      triggerCctvToast(`Berhasil mengekspor sesi (${fileName})`, 'success');
+    } catch (err) {
+      console.error('Failed to export session Excel:', err);
+      triggerCctvToast('Gagal mengekspor file Excel sesi', 'warning');
+    }
+  };
+
+  // ─── EXPORT ALL CLASSES MASTER EXCEL HANDLER (ADMIN ONLY) ───
+  const handleExportAllClassesExcel = () => {
+    if (currentUser?.role !== 'admin') return;
+    const allSessionsToExport = currentSession ? [currentSession, ...archivedSessions] : archivedSessions;
+    if (allSessionsToExport.length === 0 || allSessionsToExport.every((s) => !s.data || s.data.length === 0)) {
+      triggerCctvToast('Belum ada arsip sesi kelas untuk diekspor', 'warning');
+      return;
+    }
+
+    try {
+      const fileName = exportMasterAllClassesExcel(allSessionsToExport, currentUser);
+      triggerCctvToast(`Master Dataset seluruh kelas berhasil diunduh (${fileName})`, 'success');
+    } catch (err) {
+      console.error('Failed to export master Excel:', err);
+      triggerCctvToast('Gagal mengekspor Master Dataset', 'warning');
+    }
+  };
+
+
   const [alarmLogs, setAlarmLogs] = useState<AlarmEvent[]>([
     {
       id: 'ALM-101',
@@ -721,7 +1141,7 @@ export default function FluidHEDashboard() {
   // ─── DATA LOG FILTER STATES (INCLUDES 2s, 30s INTERVAL) ───
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
   const [logInterval, setLogInterval] = useState<'1s' | '2s' | '5s' | '30s' | '1m'>('2s');
-  const [dateFilter, setDateFilter] = useState<string>('Today');
+  const [dateFilter, setDateFilter] = useState<string>('All');
 
   // ─── P&ID HOVER TOOLTIP ───
   const [activePidHover, setActivePidHover] = useState<string | null>(null);
@@ -866,33 +1286,35 @@ export default function FluidHEDashboard() {
     const tHotIn = latestData.ti1;
     const tHotOut = latestData.ti2;
     const avgTempPanas = (tHotIn + tHotOut) / 2.0;
+    const targetUpper = supabaseControls?.target_upper ?? 60.0;
+    const targetLower = supabaseControls?.target_lower ?? 45.0;
 
-    if (avgTempPanas <= 65.0) {
-      // Suhu < 65°C: Kedua Heater (H1 1000W + H2 500W = 1500W) Aktif
+    if (avgTempPanas <= targetLower) {
+      // Suhu <= targetLower: Kedua Heater (H1 1000W + H2 500W = 1500W) Aktif
       return {
         h1: true,
         h2: true,
         stage: 'STAGE_1',
         powerWatt: 1500,
-        description: `AUTO (ESP32): Kedua Heater ON (Suhu ${avgTempPanas.toFixed(1)}°C ≤ 65°C)`
+        description: `AUTO (ESP32): Kedua Heater ON (Suhu ${avgTempPanas.toFixed(1)}°C ≤ ${targetLower}°C)`
       };
-    } else if (avgTempPanas <= 75.0) {
-      // Suhu 65°C - 75°C: Heater 1 Aktif (1000W), Heater 2 Dimatikan
+    } else if (avgTempPanas <= targetUpper) {
+      // Suhu targetLower - targetUpper: Heater 1 Aktif (1000W), Heater 2 Dimatikan
       return {
         h1: true,
         h2: false,
         stage: 'STAGE_2',
         powerWatt: 1000,
-        description: `AUTO (ESP32): Heater 1 ON, Heater 2 OFF (Suhu ${avgTempPanas.toFixed(1)}°C: 65°C - 75°C)`
+        description: `AUTO (ESP32): Heater 1 ON, Heater 2 OFF (Suhu ${avgTempPanas.toFixed(1)}°C: ${targetLower}°C - ${targetUpper}°C)`
       };
     } else {
-      // Suhu > 75°C: Melebihi batas stabil -> Kedua Heater AUTO MATI
+      // Suhu > targetUpper: Melebihi batas atas -> Kedua Heater AUTO MATI
       return {
         h1: false,
         h2: false,
         stage: 'OFF',
         powerWatt: 0,
-        description: `AUTO (ESP32): Kedua Heater Auto-MATI (Suhu ${avgTempPanas.toFixed(1)}°C > 75°C Melebihi Batas Stabil)`
+        description: `AUTO (ESP32): Kedua Heater Auto-MATI (Suhu ${avgTempPanas.toFixed(1)}°C > ${targetUpper}°C Melebihi Batas)`
       };
     }
   }, [heaterMasterPower, emergencyStopped, fc1Valve, supabaseControls?.control_mode, supabaseControls?.heater_1_status, supabaseControls?.heater_2_status, latestData.ti1, latestData.ti2]);
@@ -906,8 +1328,12 @@ export default function FluidHEDashboard() {
   }, [latestData.pi3, latestData.pi4]);
 
   const isAlarmActive = useMemo(() => {
+    // Sirine & peringatan alarm HANYA AKTIF jika user sudah LOGIN dan sistem IoT sedang AKTIF
+    if (!isLoggedIn || systemState !== 'ACTIVE') {
+      return false;
+    }
     return latestData.ti1 > ti1MaxThreshold || deltaPHot > deltaPMaxThreshold;
-  }, [latestData.ti1, ti1MaxThreshold, deltaPHot, deltaPMaxThreshold]);
+  }, [isLoggedIn, systemState, latestData.ti1, ti1MaxThreshold, deltaPHot, deltaPMaxThreshold]);
 
   // ─── OPERATOR SESSION TIMER EFFECT ───
   useEffect(() => {
@@ -930,16 +1356,24 @@ export default function FluidHEDashboard() {
     };
   }, [isLoggedIn, currentUser.role, operatorSessionLimit]);
 
-  // ─── 1-MINUTE TARGET TEMPERATURE WARNING TIMER EFFECT ───
+  // ─── 1-MINUTE TARGET TEMPERATURE WARNING TIMER EFFECT (WITH 30s SNOOZE) ───
+  const warningSnoozeUntilRef = useRef<number>(0);
+
+  const handleAcknowledgeHeatingWarning = () => {
+    setShow1MinWarning(false);
+    warningSnoozeUntilRef.current = Date.now() + 30000; // Sembunyikan & tunda selama 30 detik
+  };
+
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null;
-    const isHeating = heaterMasterPower && !emergencyStopped && fc1Valve > 0;
+    const isHeating = (heaterMasterPower || supabaseControls?.heater_1_status || supabaseControls?.btn_onoff) && !emergencyStopped && fc1Valve > 0;
 
     if (isHeating && latestData.ti2 < tc1Setpoint - 1.5) {
       timer = setInterval(() => {
         setHeatingTimerSeconds((prev) => {
           const next = prev + 1;
-          if (next >= 60) {
+          const isSnoozed = Date.now() < warningSnoozeUntilRef.current;
+          if (next >= 60 && !isSnoozed) {
             setShow1MinWarning(true);
           }
           return next;
@@ -948,12 +1382,13 @@ export default function FluidHEDashboard() {
     } else {
       setHeatingTimerSeconds(0);
       setShow1MinWarning(false);
+      warningSnoozeUntilRef.current = 0;
     }
 
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [heaterMasterPower, emergencyStopped, fc1Valve, latestData.ti2, tc1Setpoint]);
+  }, [heaterMasterPower, supabaseControls?.heater_1_status, supabaseControls?.btn_onoff, emergencyStopped, fc1Valve, latestData.ti2, tc1Setpoint]);
 
   // ─── AUDIO SYNTHESIZER SIREN FOR ALARM ───
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -1002,7 +1437,7 @@ export default function FluidHEDashboard() {
   };
 
   useEffect(() => {
-    if (isAlarmActive && soundEnabled && isLoggedIn) {
+    if (isAlarmActive && soundEnabled && isLoggedIn && systemState === 'ACTIVE') {
       startSirenSound();
     } else {
       stopSirenSound();
@@ -1010,7 +1445,7 @@ export default function FluidHEDashboard() {
     return () => {
       stopSirenSound();
     };
-  }, [isAlarmActive, soundEnabled, isLoggedIn]);
+  }, [isAlarmActive, soundEnabled, isLoggedIn, systemState]);
 
   // ─── TELEMETRY SIMULATION LOOP (WITH DUAL HEATER & SOLENOID VALVES) ───
   // ─── TELEMETRY DATA HANDLER (REAL-TIME SUPABASE TELEMETRY_DATA ONLY) ───
@@ -1024,6 +1459,7 @@ export default function FluidHEDashboard() {
         timestamp: c.updated_at
           ? new Date(c.updated_at).toLocaleTimeString('id-ID')
           : new Date().toLocaleTimeString('id-ID'),
+        created_at: c.updated_at || new Date().toISOString(),
         ti1: Number(c.temp_1 || 0),
         ti2: Number(c.temp_2 || 0),
         ti3: Number(c.temp_3 || 0),
@@ -1050,6 +1486,25 @@ export default function FluidHEDashboard() {
         }
         return [...prev.slice(-29), newPoint];
       });
+
+      // ─── IF SYSTEM IS ACTIVE, RECORD POINT TO CURRENT SESSION (ANTI DATA TERCAMPUR) ───
+      if (systemState === 'ACTIVE') {
+        setCurrentSession((prev) => {
+          if (!prev) return prev;
+          const currentData = prev.data || [];
+          if (currentData.length > 0 && currentData[currentData.length - 1].timestamp === newPoint.timestamp) {
+            const updatedData = [...currentData];
+            updatedData[updatedData.length - 1] = newPoint;
+            return { ...prev, data: updatedData, pointsCount: updatedData.length };
+          }
+          const updatedData = [...currentData, newPoint];
+          const updatedSession = { ...prev, data: updatedData, pointsCount: updatedData.length };
+          try {
+            localStorage.setItem('fluidhe_current_session', JSON.stringify(updatedSession));
+          } catch (e) {}
+          return updatedSession;
+        });
+      }
       return;
     }
 
@@ -1058,12 +1513,22 @@ export default function FluidHEDashboard() {
       : (supabaseTelemetry ? [supabaseTelemetry] : []);
 
     if (streamToUse.length > 0) {
-      const realHistory: TelemetryPoint[] = streamToUse.map((row) => {
+      // Filter out stale data from previous dates if latest point is from today / current active session
+      const latestRow = streamToUse[streamToUse.length - 1];
+      const latestDateStr = latestRow.created_at ? new Date(latestRow.created_at).toDateString() : new Date().toDateString();
+      const filteredStream = streamToUse.filter((row) => {
+        if (!row.created_at) return true;
+        const rowDateStr = new Date(row.created_at).toDateString();
+        return rowDateStr === latestDateStr;
+      });
+
+      const realHistory: TelemetryPoint[] = filteredStream.map((row) => {
         const isHeaterOn = row.heater_status === 'ON';
         return {
           timestamp: row.created_at
             ? new Date(row.created_at).toLocaleTimeString('id-ID')
             : new Date().toLocaleTimeString('id-ID'),
+          created_at: row.created_at || new Date().toISOString(),
           ti1: row.temp_1,
           ti2: row.temp_2,
           ti3: row.temp_3,
@@ -1083,9 +1548,26 @@ export default function FluidHEDashboard() {
         };
       });
       setTelemetryHistory(realHistory);
+
+      if (systemState === 'ACTIVE' && realHistory.length > 0) {
+        const latestPoint = realHistory[realHistory.length - 1];
+        setCurrentSession((prev) => {
+          if (!prev) return prev;
+          const currentData = prev.data || [];
+          if (currentData.length > 0 && currentData[currentData.length - 1].timestamp === latestPoint.timestamp) {
+            return prev;
+          }
+          const updatedData = [...currentData, latestPoint];
+          const updatedSession = { ...prev, data: updatedData, pointsCount: updatedData.length };
+          try {
+            localStorage.setItem('fluidhe_current_session', JSON.stringify(updatedSession));
+          } catch (e) {}
+          return updatedSession;
+        });
+      }
       return;
     }
-  }, [supabaseStatus, supabaseTelemetry, telemetryStream, supabaseControls, tc1Setpoint, operationMode]);
+  }, [supabaseStatus, supabaseTelemetry, telemetryStream, supabaseControls, tc1Setpoint, operationMode, systemState]);
 
   // ─── OTP PASSWORD RESET HANDLERS (SECURE EMAIL VERIFICATION FOR ALL REGISTERED USERS) ───
   const handleRequestOtp = async (e?: React.SyntheticEvent) => {
@@ -1179,7 +1661,7 @@ export default function FluidHEDashboard() {
     };
   }, [isManualRecording]);
 
-  // ─── WEBRTC CONNECTION TO go2rtc ───
+  // ─── WEBRTC CONNECTION TO go2rtc (ULTRA-LOW LATENCY REAL-TIME) ───
   const connectWebRTC = async () => {
     if (pcRef.current) {
       pcRef.current.close();
@@ -1194,11 +1676,29 @@ export default function FluidHEDashboard() {
       });
       pcRef.current = pc;
 
-      pc.addTransceiver('video', { direction: 'recvonly' });
+      const videoTransceiver = pc.addTransceiver('video', { direction: 'recvonly' });
       const audioTransceiver = pc.addTransceiver('audio', { direction: 'recvonly' });
       audioTransceiverRef.current = audioTransceiver;
 
+      // Ultra-Low Latency: Minimalkan Jitter Buffer Playout Delay ke 0 detik
+      const setZeroDelayHint = (receiver: any) => {
+        if (!receiver) return;
+        try {
+          if ('playoutDelayHint' in receiver) {
+            receiver.playoutDelayHint = 0;
+          }
+          if ('jitterBufferDelayHint' in receiver) {
+            receiver.jitterBufferDelayHint = 0;
+          }
+        } catch (e) {}
+      };
+
+      if (videoTransceiver.receiver) setZeroDelayHint(videoTransceiver.receiver);
+      if (audioTransceiver.receiver) setZeroDelayHint(audioTransceiver.receiver);
+
       pc.ontrack = (event) => {
+        if (event.receiver) setZeroDelayHint(event.receiver);
+
         if (videoRef.current) {
           if (event.streams && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
@@ -1221,6 +1721,10 @@ export default function FluidHEDashboard() {
         if (state === 'connected') {
           setWebrtcConnected(true);
           setWebrtcError(null);
+          // Pastikan semua receiver tetap 0-delay saat koneksi established
+          try {
+            pc.getReceivers().forEach((r) => setZeroDelayHint(r));
+          } catch (e) {}
           if (videoRef.current) {
             videoRef.current.play().catch(() => { });
           }
@@ -1284,6 +1788,19 @@ export default function FluidHEDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cctvStreamSource, activeTab]);
+
+  // Anti-Delay Sync: Segera sinkronkan ulang live stream jika tab browser aktif kembali
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && activeTab === 'cctv' && cctvStreamSource === 'local') {
+        if (videoRef.current) {
+          videoRef.current.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [activeTab, cctvStreamSource]);
 
   // Sync audio mute with video element — uses ref to bypass browser autoplay restrictions
   useEffect(() => {
@@ -1716,6 +2233,19 @@ export default function FluidHEDashboard() {
     if (e) e.preventDefault();
     setLoginError(null);
 
+    // Pertahankan status sesi jika pengguna memiliki sesi aktif yang sedang berjalan
+    const existingSession = typeof window !== 'undefined' ? localStorage.getItem('fluidhe_current_session') : null;
+    const existingState = typeof window !== 'undefined' ? localStorage.getItem('fluidhe_system_state') : null;
+    if (!existingSession || existingState !== 'ACTIVE') {
+      setSystemState('OFF');
+      setCurrentSession(null);
+      setSessionDuration(0);
+      try {
+        localStorage.setItem('fluidhe_system_state', 'OFF');
+        localStorage.removeItem('fluidhe_current_session');
+      } catch (e) {}
+    }
+
     const inputEmail = loginEmail.toLowerCase().trim();
     const inputPass = (loginPassword || '').trim();
 
@@ -1743,13 +2273,19 @@ export default function FluidHEDashboard() {
         }).catch(() => { });
       } catch (e) { }
 
-      setCurrentUser({
+      const userObj = {
         name: displayName,
         email: targetEmail,
-        role: 'admin'
-      });
+        role: 'admin' as UserRole
+      };
+      setCurrentUser(userObj);
       setIsLoggedIn(true);
       setActiveTab('dashboard');
+      try {
+        localStorage.setItem('fluidhe_auth_user', JSON.stringify(userObj));
+        localStorage.setItem('fluidhe_is_logged_in', 'true');
+        localStorage.setItem('fluidhe_active_tab', 'dashboard');
+      } catch (e) {}
       return;
     }
 
@@ -1776,14 +2312,20 @@ export default function FluidHEDashboard() {
         }).catch(() => { });
       } catch (e) { }
 
-      setCurrentUser({
+      const userObj = {
         name: displayName,
         email: targetEmail,
-        role: 'operator'
-      });
+        role: 'operator' as UserRole
+      };
+      setCurrentUser(userObj);
       setOperatorSessionRemaining(operatorSessionLimit * 60);
       setIsLoggedIn(true);
       setActiveTab('dashboard');
+      try {
+        localStorage.setItem('fluidhe_auth_user', JSON.stringify(userObj));
+        localStorage.setItem('fluidhe_is_logged_in', 'true');
+        localStorage.setItem('fluidhe_active_tab', 'dashboard');
+      } catch (e) {}
       return;
     }
 
@@ -1884,34 +2426,45 @@ export default function FluidHEDashboard() {
       console.error('Failed to update lastLogin on server', e);
     }
 
+    let loggedInUser: { name: string; email: string; role: UserRole };
     if (found) {
-      setCurrentUser({
+      loggedInUser = {
         name: found.name,
         email: found.email,
         role: found.role
-      });
+      };
+      setCurrentUser(loggedInUser);
       if (found.role === 'operator') {
         setOperatorSessionRemaining(operatorSessionLimit * 60);
       }
     } else if (actualRole === 'admin') {
-      setCurrentUser({
+      loggedInUser = {
         name: 'Admin Lab (Anugrah)',
         email: targetEmail,
         role: 'admin'
-      });
+      };
+      setCurrentUser(loggedInUser);
     } else {
-      setCurrentUser({
+      loggedInUser = {
         name: 'Operator Lab',
         email: targetEmail,
         role: 'operator'
-      });
+      };
+      setCurrentUser(loggedInUser);
       setOperatorSessionRemaining(operatorSessionLimit * 60);
     }
     setIsLoggedIn(true);
     setActiveTab('dashboard');
+    try {
+      localStorage.setItem('fluidhe_auth_user', JSON.stringify(loggedInUser));
+      localStorage.setItem('fluidhe_is_logged_in', 'true');
+      localStorage.setItem('fluidhe_active_tab', 'dashboard');
+    } catch (e) {}
   };
 
   const handleLogout = () => {
+    stopSirenSound();
+    setShowAlarmModal(false);
     if (currentUser?.email) {
       fetch('/api/users', {
         method: 'PATCH',
@@ -1920,13 +2473,79 @@ export default function FluidHEDashboard() {
       }).catch(() => { });
     }
     setIsLoggedIn(false);
+    setSystemState('OFF');
+    setCurrentSession(null);
+    setSessionDuration(0);
+    try {
+      localStorage.removeItem('fluidhe_auth_user');
+      localStorage.removeItem('fluidhe_is_logged_in');
+      localStorage.removeItem('fluidhe_active_tab');
+      localStorage.setItem('fluidhe_system_state', 'OFF');
+      localStorage.removeItem('fluidhe_current_session');
+    } catch (e) {}
+  };
+
+  const handleConfirmShutdownAndLogout = async () => {
+    setIsLoggingOutWithShutdown(true);
+    setSystemState('STOPPING');
+
+    // 1. Matikan pemanas & aktuator secara aman via siklus SHUTDOWN ke ESP32 & Supabase
+    setHeaterMasterPower(false);
+    try {
+      await handleSystemShutdown();
+    } catch (e) {
+      console.error('Gagal shutdown saat logout:', e);
+    }
+
+    // 2. Arsipkan sesi praktikum jika ada
+    const now = new Date();
+    const finalSession: SystemSession | null = currentSession
+      ? {
+          ...currentSession,
+          endTime: now.toLocaleTimeString('id-ID'),
+          endTimeMs: Date.now(),
+          durationSeconds: sessionDuration,
+          pointsCount: currentSession.data.length
+        }
+      : null;
+
+    if (finalSession) {
+      setArchivedSessions((prev) => {
+        const updated = [finalSession, ...prev.filter((s) => s.id !== finalSession.id)];
+        return updated;
+      });
+
+      try {
+        await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: finalSession })
+        });
+        if (currentUser?.email) {
+          fetchSessions(currentUser.role, currentUser.email, classFilter);
+        }
+      } catch (err) {
+        console.error('Gagal menyimpan sesi saat logout:', err);
+      }
+    }
+
+    setIsLoggingOutWithShutdown(false);
+    setIsLogoutConfirmModalOpen(false);
+    handleLogout();
+    triggerSyncFeedback('Sistem Dimatikan & Keluar', 'Sistem berhasil dimatikan secara aman dan Anda telah logout.');
+  };
+
+  const handleLogoutOnly = () => {
+    setIsLogoutConfirmModalOpen(false);
+    handleLogout();
   };
 
   // ─── EMERGENCY STOP HANDLER ───
-  const triggerEmergencyStop = () => {
+  const triggerEmergencyStop = async () => {
     setEmergencyStopped(true);
     setHeaterMasterPower(false);
     setFc1Valve(0);
+    await handleEmergencyShutdown();
     setAlarmLogs((prev) => [
       {
         id: `ALM-${Math.floor(100 + Math.random() * 900)}`,
@@ -1940,24 +2559,45 @@ export default function FluidHEDashboard() {
       },
       ...prev
     ]);
+    triggerSyncFeedback('EMERGENCY STOP', 'Perintah Matikan Darurat Dikirim ke ESP32');
   };
 
-  const resetEmergencyStop = () => {
+  const resetEmergencyStop = async () => {
     setEmergencyStopped(false);
     setHeaterMasterPower(true);
-    setFc1Valve(75);
+    setFc1Valve(100);
+    setFc2Valve(100);
+    await handleControlModeChange('MANUAL');
   };
+
+  // ─── ACTIVE SESSION DATA SELECTION (ANTI DATA TERCAMPUR) ───
+  const activeSessionData = useMemo(() => {
+    if (selectedLogsSessionId === 'CURRENT') {
+      return (currentSession && currentSession.data && currentSession.data.length > 0)
+        ? currentSession.data
+        : telemetryHistory;
+    }
+    const archived = archivedSessions.find((s) => s.id === selectedLogsSessionId);
+    if (archived && archived.data && archived.data.length > 0) {
+      return archived.data;
+    }
+    // Fallback: jika sesi spesifik belum ditemukan tapi ada list archivedSessions
+    if (archivedSessions.length > 0 && selectedLogsSessionId !== 'CURRENT') {
+      return archivedSessions[0].data || [];
+    }
+    return [];
+  }, [selectedLogsSessionId, currentSession, telemetryHistory, archivedSessions]);
 
   // ─── DOWNSAMPLED LOGS FOR INTERVAL EXPORT & TABLE (1s, 2s, 5s, 30s, 1m) ───
   const filteredLogsData = useMemo(() => {
-    // 1. Date Filter Logic: If selecting past dates with no archives, return empty list
-    if (dateFilter === 'Yesterday' || dateFilter === '7Days') {
+    // 1. Date Filter Logic: If looking at current live session with past date filter, return empty list
+    if (selectedLogsSessionId === 'CURRENT' && (dateFilter === 'Yesterday' || dateFilter === '7Days')) {
       return [];
     }
 
     // 2. Multi-column search filter (Timestamp, Temperatures TI1-TI4, Heater Status, Mode)
     const q = logSearchQuery.trim().toLowerCase();
-    const queryFiltered = telemetryHistory.filter((d) => {
+    const queryFiltered = activeSessionData.filter((d) => {
       if (!q) return true;
       return (
         d.timestamp.toLowerCase().includes(q) ||
@@ -1984,7 +2624,7 @@ export default function FluidHEDashboard() {
       return queryFiltered.filter((_, idx) => idx % 12 === 0);
     }
     return queryFiltered;
-  }, [telemetryHistory, logSearchQuery, logInterval, dateFilter]);
+  }, [activeSessionData, logSearchQuery, logInterval, dateFilter]);
 
   // ─── CLOUD DRIVE AUTO-SYNC & FLASHDISK DISABLE HANDLERS ───
   const getFormattedDateStr = (date: Date) => {
@@ -2007,31 +2647,26 @@ export default function FluidHEDashboard() {
       setIsUploading(true);
       triggerCctvToast('⏳ Mengolah data & mengunggah file ke Cloud Storage...', 'info');
 
-      // 1. Generate Excel (kode yang sudah ada)
-      const wb = XLSX.utils.book_new();
-      const wsData = [
-        ['Waktu', 'TI1', 'TI2', 'TI3', 'TI4', 'Heater1', 'Heater2', 'Mode'],
-        ...filteredLogsData.map((d) => [
-          d.timestamp,
-          d.ti1,
-          d.ti2,
-          d.ti3,
-          d.ti4,
-          d.heater1Active ? 'ON' : 'OFF',
-          d.heater2Active ? 'ON' : 'OFF',
-          d.mode
-        ])
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      XLSX.utils.book_append_sheet(wb, ws, 'Telemetry');
-      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([excelBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      });
+      const currentOrDummySession: SystemSession = {
+        id: currentSession?.id || `SES-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+        title: currentSession?.title || 'Log Telemetri Heat Exchanger',
+        date: currentSession?.date || new Date().toISOString().slice(0, 10),
+        startTime: currentSession?.startTime || new Date().toLocaleTimeString('id-ID'),
+        startTimeMs: currentSession?.startTimeMs || Date.now(),
+        operatorName: currentUser?.name || 'Operator',
+        operatorEmail: currentUser?.email,
+        classGroup: currentUser?.name,
+        flowMode: operationMode,
+        pointsCount: filteredLogsData.length,
+        data: filteredLogsData,
+        durationSeconds: sessionDuration
+      };
+
+      const { blob, fileName } = exportSessionToExcel(currentOrDummySession, { returnBlob: true });
+      if (!blob) throw new Error('Gagal menghasilkan file spreadsheet');
 
       // 2. Upload
       const { uploadToCloud } = await import('@/lib/upload-helper');
-      const fileName = `HE_Telemetry_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const result = await uploadToCloud(blob, fileName, 'telemetry-logs');
 
       triggerCctvToast('File Excel tersimpan di Cloud Storage', 'success');
@@ -2091,6 +2726,7 @@ export default function FluidHEDashboard() {
         fc2Valve={supabaseControls?.servo_angle_2 ?? fc2Valve}
         uapStatus={supabaseControls?.uap_status}
         airDinginStatus={supabaseControls?.air_dingin}
+        pompaStatus={supabaseControls?.pompa_ekstra ?? false}
         dualHeaterState={dualHeaterState}
         solenoidValves={solenoidValves}
         deltaPHot={deltaPHot}
@@ -2098,6 +2734,18 @@ export default function FluidHEDashboard() {
       />
     );
   };
+
+  // ─── RENDER: HYDRATION MOUNT SHIELD (PREVENT SSR MISMATCH ON RELOAD) ───
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white font-sans">
+        <div className="flex flex-col items-center gap-3.5">
+          <div className="w-10 h-10 border-4 border-sky-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-bold tracking-widest text-slate-300 uppercase">Memuat FluidHE IoT System...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ─── RENDER: LOGIN SCREEN (SUPPORTING ADMIN & OPERATOR ROLES) ───
   if (!isLoggedIn) {
@@ -2147,7 +2795,7 @@ export default function FluidHEDashboard() {
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
 
       {/* ─── ALARM SIREN POPUP MODAL ─── */}
-      {showAlarmModal && isAlarmActive && (
+      {showAlarmModal && isAlarmActive && isLoggedIn && systemState === 'ACTIVE' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="asklepios-card max-w-md w-full p-6 bg-white rounded-3xl shadow-2xl border-2 border-red-500 animate-pulse">
             <div className="flex items-center gap-3 text-red-600 mb-4">
@@ -2417,6 +3065,15 @@ export default function FluidHEDashboard() {
             <span className="hidden sm:inline">Panduan</span>
           </button>
 
+          {/* ─── SYSTEM READINESS & STATUS BADGE (MATI / STANDBY / AKTIF) ─── */}
+          <SystemStatusBadge
+            status={systemState}
+            sessionDuration={sessionDuration}
+            sessionId={currentSession?.id || null}
+            onOpenStartup={() => setIsStartupModalOpen(true)}
+            onOpenEndSession={() => setIsEndSessionModalOpen(true)}
+          />
+
           {/* Supabase & ESP32 Hardware Connection Status Badge */}
           <div
             id="tour-iot-badge"
@@ -2491,7 +3148,7 @@ export default function FluidHEDashboard() {
             </div>
 
             <button
-              onClick={handleLogout}
+              onClick={() => setIsLogoutConfirmModalOpen(true)}
               title="Keluar Sesi"
               className="p-1 sm:p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
             >
@@ -2501,8 +3158,18 @@ export default function FluidHEDashboard() {
         </div>
       </header>
 
-      {/* ─── BODY CONTAINER (SIDEBAR + MAIN CONTENT) ─── */}
-      <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1600px] mx-auto relative min-w-0">
+      {/* ─── CONDITIONAL RENDER: STANDBY SCREEN (WHEN MACHINE IS OFF) VS ACTIVE DASHBOARD ─── */}
+      {systemState !== 'ACTIVE' ? (
+        <SystemStandbyScreen
+          systemState={systemState}
+          operatorName={currentUser?.name || 'Operator'}
+          defaultFlowMode={operationMode}
+          onStartSystem={handleConfirmStartup}
+          recentArchivesCount={archivedSessions.length}
+        />
+      ) : (
+        /* ─── BODY CONTAINER (SIDEBAR + MAIN CONTENT) ─── */
+        <div className="flex-1 flex flex-col md:flex-row w-full max-w-[1600px] mx-auto relative min-w-0">
 
         {/* ─── MOBILE BACKDROP OVERLAY ─── */}
         {isSidebarOpen && (
@@ -2595,6 +3262,23 @@ export default function FluidHEDashboard() {
 
               <button
                 onClick={() => {
+                  setActiveTab('sessions');
+                  setIsSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'sessions'
+                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <FolderKanban className="w-4 h-4 shrink-0" />
+                  <span className="truncate whitespace-nowrap">Data Praktikum</span>
+                </div>
+                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
+              </button>
+
+              <button
+                onClick={() => {
                   setActiveTab('cctv');
                   setIsSidebarOpen(false);
                 }}
@@ -2603,10 +3287,11 @@ export default function FluidHEDashboard() {
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
-                <div className="flex items-center gap-3">
-                  <Video className="w-4 h-4" /> CCTV Feed
+                <div className="flex items-center gap-3 min-w-0">
+                  <Video className="w-4 h-4 shrink-0" />
+                  <span className="truncate">CCTV Feed</span>
                 </div>
-                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200">Admin</span>
+                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
               </button>
 
               <button
@@ -2619,10 +3304,11 @@ export default function FluidHEDashboard() {
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
-                <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4" /> User Management
+                <div className="flex items-center gap-3 min-w-0">
+                  <Users className="w-4 h-4 shrink-0" />
+                  <span className="truncate">User Management</span>
                 </div>
-                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200">Admin</span>
+                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
               </button>
             </div>
           )}
@@ -2632,7 +3318,7 @@ export default function FluidHEDashboard() {
               <Server className="w-4 h-4 text-sky-600" /> Specs Hardware
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Double Heater (2x 500W), 3 Solenoid Uap, 4 Termostat (TI), 4 Preasur (PI), 4 Katup Oranye (3 FC & 1 MV).
+              Dual Heater (H1 &amp; H2), 4 Solenoid Valve (SV1–SV4), 4 Sensor Suhu (T1–T4), 4 Sensor Tekanan (P1–P4), 2 Flow Meter (FC1–FC2), &amp; Katup Manual (VL).
             </p>
           </div>
         </aside>
@@ -2640,19 +3326,19 @@ export default function FluidHEDashboard() {
         {/* ─── MAIN CONTENT VIEW SWITCHER ─── */}
         <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-3.5 sm:p-4 md:p-6 space-y-6 overflow-y-auto pb-24 md:pb-6">
 
-          {/* SAFETY / WARNING BANNERS */}
+          {/* SAFETY / WARNING BANNERS (HANYA MUNCUL DI TAB MONITORING AKTIF & TIDAK MUNCUL DI LAPORAN / PRINT) */}
           {/* 🚨 CRITICAL WARNING SYSTEM POP-UP BANNER (WARN_BKA_UAP / PRESSURE & TEMP ALERT) */}
-          {(supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
+          {(activeTab === 'dashboard' || activeTab === 'control') &&
+            (supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
             (supabaseTelemetry && (supabaseTelemetry.pressure > 2.0 || supabaseTelemetry.temp_1 > 65.0 || supabaseTelemetry.temp_2 > 65.0))) && (
-              <div className="p-4 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white border-2 border-red-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-red-600/30 animate-pulse">
+              <div className="no-print print:hidden p-4 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white border-2 border-red-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-red-600/30 animate-pulse">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-white/20 rounded-xl shrink-0">
                     <AlertTriangle className="w-7 h-7 text-white animate-bounce" />
                   </div>
                   <div>
-                    <h4 className="font-black text-sm sm:text-base text-white tracking-wide uppercase flex items-center gap-2">
+                    <h4 className="font-black text-sm sm:text-base text-white tracking-wide uppercase">
                       PERINGATAN BAHAYA: Tekanan atau Suhu Kritis!
-                      <span className="px-2 py-0.5 bg-white text-red-700 text-[10px] font-black rounded-full uppercase">WARN_BKA_UAP</span>
                     </h4>
                     <p className="text-xs text-red-100 font-medium mt-0.5">
                       Harap Buka Katup Uap Sekarang! Tekanan terdeteksi &gt; 2.0 Bar atau Suhu &gt; 65°C.
@@ -2673,8 +3359,8 @@ export default function FluidHEDashboard() {
               </div>
             )}
 
-          {primingNotice && (
-            <div className="p-4 bg-gradient-to-r from-sky-50 via-blue-50 to-sky-50 border border-sky-300 rounded-2xl flex justify-between items-center text-xs text-sky-950 shadow-xs animate-fade-in">
+          {(activeTab === 'dashboard' || activeTab === 'control') && primingNotice && (
+            <div className="no-print print:hidden p-4 bg-gradient-to-r from-sky-50 via-blue-50 to-sky-50 border border-sky-300 rounded-2xl flex justify-between items-center text-xs text-sky-950 shadow-xs animate-fade-in">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-sky-600 shrink-0" />
                 <div>
@@ -2688,8 +3374,8 @@ export default function FluidHEDashboard() {
             </div>
           )}
 
-          {show1MinWarning && (
-            <div className="p-4 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50/50 border border-sky-300 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs text-sky-950 shadow-sm animate-fade-in">
+          {(activeTab === 'dashboard' || activeTab === 'control') && show1MinWarning && (
+            <div className="no-print print:hidden p-4 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50/50 border border-sky-300 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs text-sky-950 shadow-sm animate-fade-in">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-sky-100 text-sky-700 border border-sky-200 shrink-0">
                   <Clock className="w-5 h-5" />
@@ -2703,7 +3389,7 @@ export default function FluidHEDashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => setShow1MinWarning(false)}
+                onClick={handleAcknowledgeHeatingWarning}
                 className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs shadow-sm transition cursor-pointer shrink-0"
               >
                 Mengerti
@@ -2722,8 +3408,8 @@ export default function FluidHEDashboard() {
                 ti1MaxThreshold={ti1MaxThreshold}
                 deltaPHot={deltaPHot}
                 deltaPCold={deltaPCold}
-                fc1Valve={fc1Valve}
-                fc2Valve={fc2Valve}
+                fc1Valve={supabaseControls?.servo_angle !== undefined ? supabaseControls.servo_angle : fc1Valve}
+                fc2Valve={supabaseControls?.servo_angle_2 !== undefined ? supabaseControls.servo_angle_2 : fc2Valve}
                 onCardClick={() => setActiveTab('control')}
               />
 
@@ -2874,7 +3560,7 @@ export default function FluidHEDashboard() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 sm:gap-4">
 
                     {/* Switch Control Mode (AUTO / MANUAL) */}
-                    <div className="p-2.5 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 space-y-1.5 sm:space-y-2.5">
+                    <div id="tour-control-mode" className="p-2.5 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 space-y-1.5 sm:space-y-2.5">
                       <div className="flex justify-between items-center gap-2">
                         <label className="text-[11px] sm:text-xs font-bold text-slate-800 flex items-center gap-1.5 truncate">
                           <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600 shrink-0" />
@@ -2933,17 +3619,24 @@ export default function FluidHEDashboard() {
                       }}
                     />
 
-                    {/* Kontrol Heater 1 (Pemanas Utama: P1 - P7 + On/Off) */}
-                    <TargetTempSlider
-                      targetTemp={supabaseControls.target_temp ?? tc1Setpoint ?? 40}
+                    {/* BARIS 1: SISTEM DUAL HEATER (HEATER 1 & HEATER 2 DALAM 1 BARIS TERPADU SEJAJAR) */}
+                    <DualHeatersControl
                       controlMode={supabaseControls.control_mode}
-                      heater1Status={supabaseControls.heater_1_status !== undefined ? supabaseControls.heater_1_status : supabaseControls.heater_status}
+                      targetTemp={supabaseControls.target_temp ?? tc1Setpoint ?? 40}
+                      heater1Status={supabaseControls.btn_onoff !== undefined ? supabaseControls.btn_onoff : (supabaseControls.heater_1_status ?? false)}
+                      heater2Status={supabaseControls.heater_2_status !== undefined ? supabaseControls.heater_2_status : false}
                       emergencyStopped={emergencyStopped}
                       isBtnUpActive={activeMomentaryButtons.btn_up}
                       isBtnDownActive={activeMomentaryButtons.btn_down}
+                      targetUpper={supabaseControls.target_upper ?? 60}
+                      targetLower={supabaseControls.target_lower ?? 45}
                       onToggleHeater1={(nextState) => {
                         handleHeater1PowerToggle(nextState);
-                        triggerSyncFeedback('Heater 1 (P1-P7)', nextState ? 'ON' : 'OFF');
+                        triggerSyncFeedback('Heater 1', nextState ? 'ON' : 'OFF');
+                      }}
+                      onToggleHeater2={(nextState) => {
+                        handleHeater2PowerToggle(nextState);
+                        triggerSyncFeedback('Heater 2 (500W)', nextState ? 'ON' : 'OFF');
                       }}
                       onStepUp={() => {
                         const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
@@ -2951,9 +3644,7 @@ export default function FluidHEDashboard() {
                         setTc1Setpoint(nextTemp);
                         handleTargetTempChange(nextTemp);
                         handleStepButtonPress('btn_up');
-                        const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
-                        const step = stepNames[nextTemp] || 'P1';
-                        triggerSyncFeedback('Naikkan Level (P+)', `Level ${step}`);
+                        triggerSyncFeedback('Naikkan Level', `Target ${nextTemp}°C`);
                       }}
                       onStepDown={() => {
                         const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
@@ -2961,114 +3652,139 @@ export default function FluidHEDashboard() {
                         setTc1Setpoint(nextTemp);
                         handleTargetTempChange(nextTemp);
                         handleStepButtonPress('btn_down');
-                        const stepNames: Record<number, string> = { 30: 'P1', 40: 'P2', 50: 'P3', 60: 'P4', 70: 'P5', 80: 'P6', 90: 'P7' };
-                        const step = stepNames[nextTemp] || 'P1';
-                        triggerSyncFeedback('Turunkan Level (P-)', `Level ${step}`);
+                        triggerSyncFeedback('Turunkan Level', `Target ${nextTemp}°C`);
+                      }}
+                      onSaveThermostatLimits={(up, low) => {
+                        handleThermostatLimitsChange(up, low);
+                        triggerSyncFeedback('Thermostat Limit', `H2 OFF: ${up}°C | H2 ON: ${low}°C`);
                       }}
                     />
 
-                    {/* Kontrol Heater 2 (Pemanas Tambahan: On/Off Saja) */}
-                    <HeaterControl
-                      controlMode={supabaseControls.control_mode}
-                      heaterStatus={supabaseControls.heater_status}
-                      heater1Status={supabaseControls.heater_1_status !== undefined ? supabaseControls.heater_1_status : supabaseControls.heater_status}
-                      heater2Status={supabaseControls.heater_2_status !== undefined ? supabaseControls.heater_2_status : false}
-                      emergencyStopped={emergencyStopped}
-                      dualHeaterState={dualHeaterState}
-                      onToggleHeater={(nextState) => {
-                        setHeaterMasterPower(nextState);
-                        handleHeaterPowerToggle(nextState);
-                        triggerSyncFeedback('Daya Master Heater', nextState ? 'POWER ON' : 'POWER OFF');
-                      }}
-                      onToggleHeater1={(nextState) => {
-                        handleHeater1PowerToggle(nextState);
-                        triggerSyncFeedback('Heater 1 (P1-P7)', nextState ? 'ON' : 'OFF');
-                      }}
-                      onToggleHeater2={(nextState) => {
-                        handleHeater2PowerToggle(nextState);
-                        triggerSyncFeedback('Heater 2 (500W)', nextState ? 'ON' : 'OFF');
-                      }}
-                    />
+                    {/* BARIS 2: POMPA SIRKULASI (KIRI), KATUP SOLENOID UAP (TENGAH), KATUP AIR DINGIN (KANAN) */}
+                    <div className="col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 items-stretch">
+                      {/* 1. Pompa Sirkulasi (KIRI) */}
+                      <PumpControl
+                        controlMode={supabaseControls.control_mode}
+                        pompaStatus={supabaseControls.pompa_ekstra ?? false}
+                        emergencyStopped={emergencyStopped}
+                        onTogglePompa={(nextState) => {
+                          handlePompaToggle(nextState);
+                          triggerSyncFeedback('Pompa Sirkulasi', nextState ? 'POMPA NYALA (ON)' : 'POMPA MATI (OFF)');
+                        }}
+                      />
 
-                    {/* Solenoid Valves Row: Katup Solenoid Uap (7 Kolom) & Katup Solenoid Air Dingin (5 Kolom) */}
-                    <div className="col-span-1 lg:col-span-2 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-                      {/* Katup Uap Dual Mode (Lebih Lebar: 7 Kolom) */}
-                      <div className="lg:col-span-7 flex flex-col">
-                        <SteamValveControl
-                          controlMode={supabaseControls.control_mode}
-                          uapStatus={
-                            (latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0)
-                              ? true
-                              : (supabaseControls.uap_status ?? false)
-                          }
-                          uapAutoStatus={supabaseControls.control_mode === 'AUTO' ? true : (supabaseControls.uap_auto_status ?? false)}
-                          uapIntervalMin={supabaseControls.uap_interval_min ?? 10}
-                          emergencyStopped={emergencyStopped}
-                          isPressureDangerous={latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0}
-                          onToggleUapManual={(nextVal: boolean) => {
-                            handleUapStatusToggle(nextVal);
-                            triggerSyncFeedback('Katup Uap Manual', nextVal ? 'DIBUKA' : 'DITUTUP');
-                          }}
-                          onToggleUapAuto={(nextVal: boolean) => {
-                            handleUapAutoToggle(nextVal);
-                            triggerSyncFeedback('Katup Uap Otomatis', nextVal ? 'AKTIF' : 'NONAKTIF');
-                          }}
-                          onChangeUapInterval={(min: number) => {
-                            handleUapIntervalChange(min);
-                            triggerSyncFeedback('Interval Katup Uap', `${min} Menit`);
-                          }}
-                        />
-                      </div>
+                      {/* 2. Katup Solenoid Uap (TENGAH) */}
+                      <SteamValveControl
+                        controlMode={supabaseControls.control_mode}
+                        uapStatus={
+                          (latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0)
+                            ? true
+                            : (supabaseControls.uap_status ?? false)
+                        }
+                        uapAutoStatus={supabaseControls.control_mode === 'AUTO' ? true : (supabaseControls.uap_auto_status ?? false)}
+                        uapIntervalMin={supabaseControls.uap_interval_min ?? 5}
+                        emergencyStopped={emergencyStopped}
+                        isPressureDangerous={latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0}
+                        onToggleUapManual={(nextVal: boolean) => {
+                          handleUapStatusToggle(nextVal);
+                          triggerSyncFeedback('Katup Uap Manual', nextVal ? 'DIBUKA' : 'DITUTUP');
+                        }}
+                        onToggleUapAuto={(nextVal: boolean) => {
+                          handleUapAutoToggle(nextVal);
+                          triggerSyncFeedback('Katup Uap Otomatis', nextVal ? 'AKTIF' : 'NONAKTIF');
+                        }}
+                        onChangeUapInterval={(min: number) => {
+                          handleUapIntervalChange(min);
+                          triggerSyncFeedback('Interval Katup Uap', `${min} Menit`);
+                        }}
+                      />
 
-                      {/* Katup Solenoid Air Dingin (5 Kolom) */}
-                      <div className="lg:col-span-5 flex flex-col">
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between h-full">
-                          <div className="flex justify-between items-center">
-                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <Droplets className="w-4 h-4 text-sky-600" />
-                              Katup Solenoid Air Dingin
+                      {/* 3. Katup Solenoid Air Dingin (KANAN) */}
+                      <div id="tour-cold-valve" className="flex flex-col h-full">
+                        <div className="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between h-full shadow-2xs">
+                          <div className="flex justify-between items-center gap-2">
+                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 truncate">
+                              <Droplets className="w-4 h-4 text-sky-600 shrink-0" />
+                              <span className="truncate font-extrabold">Katup Solenoid Air Dingin</span>
                             </label>
                             {supabaseControls.control_mode === 'AUTO' ? (
-                              <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs">
-                                AUTO: SELALU DIBUKA (OPEN)
+                              <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border bg-sky-50 text-sky-700 border-sky-200 shadow-2xs">
+                                AUTO: OPEN
                               </span>
                             ) : (
-                              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${supabaseControls.air_dingin ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-                                }`}>
+                              <span
+                                className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${
+                                  supabaseControls.air_dingin
+                                    ? 'bg-sky-50 text-sky-700 border-sky-200 shadow-2xs'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}
+                              >
                                 {supabaseControls.air_dingin ? 'OPEN' : 'CLOSED'}
                               </span>
                             )}
                           </div>
 
-                          <div className="p-3 bg-white rounded-xl border border-slate-200/90 shadow-xs space-y-2 flex-1 flex flex-col justify-between">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[11px] font-bold text-slate-700">Pasokan Air Dingin</span>
-                              <span className={`w-2 h-2 rounded-full ${(supabaseControls.control_mode === 'AUTO' || supabaseControls.air_dingin)
-                                  ? 'bg-sky-500 animate-pulse'
-                                  : 'bg-slate-300'
-                                }`} />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextVal = !supabaseControls.air_dingin;
-                                handleAirDinginToggle(nextVal);
-                                triggerSyncFeedback('Katup Air Dingin', nextVal ? 'DIBUKA' : 'DITUTUP');
-                              }}
-                              disabled={emergencyStopped || supabaseControls.control_mode === 'AUTO'}
-                              className={`w-full py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${supabaseControls.control_mode === 'AUTO'
-                                  ? 'bg-slate-800 text-white opacity-90 cursor-not-allowed shadow-2xs'
-                                  : supabaseControls.air_dingin
-                                    ? 'bg-sky-600 text-white shadow-sm hover:bg-sky-700'
-                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          <div className="space-y-3 flex-1 flex flex-col justify-between">
+                            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 flex flex-col justify-between">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[11px] font-bold text-slate-700">Pasokan Air Dingin</span>
+                                <span
+                                  className={`w-2.5 h-2.5 rounded-full ${
+                                    supabaseControls.control_mode === 'AUTO' || supabaseControls.air_dingin
+                                      ? 'bg-sky-500 animate-pulse ring-2 ring-sky-200'
+                                      : 'bg-slate-300'
+                                  }`}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextVal = !supabaseControls.air_dingin;
+                                  handleAirDinginToggle(nextVal);
+                                  triggerSyncFeedback('Katup Air Dingin', nextVal ? 'DIBUKA' : 'DITUTUP');
+                                }}
+                                disabled={emergencyStopped || supabaseControls.control_mode === 'AUTO'}
+                                className={`w-full py-2 min-h-[38px] rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs ${
+                                  supabaseControls.control_mode === 'AUTO'
+                                    ? 'bg-slate-800 text-white opacity-90 cursor-not-allowed'
+                                    : supabaseControls.air_dingin
+                                    ? 'bg-slate-900 text-white hover:bg-slate-800 active:scale-98'
+                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 active:scale-98'
                                 }`}
-                            >
-                              <Power className="w-3.5 h-3.5" />
-                              {supabaseControls.control_mode === 'AUTO'
-                                ? 'Solenoid Air Dingin Selalu Dibuka (Mode AUTO)'
-                                : (supabaseControls.air_dingin ? 'Tutup Katup Air Dingin' : 'Buka Katup Air Dingin')}
-                            </button>
+                              >
+                                <Power className="w-3.5 h-3.5" />
+                                {supabaseControls.control_mode === 'AUTO'
+                                  ? 'Solenoid Terbuka (AUTO)'
+                                  : supabaseControls.air_dingin
+                                  ? 'Tutup Katup Air Dingin'
+                                  : 'Buka Katup Air Dingin'}
+                              </button>
+                            </div>
+
+                            <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1">
+                              <div className="flex justify-between items-center text-[11px]">
+                                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                  <Droplets className="w-3.5 h-3.5 text-sky-600" /> Pendingin Shell/Tube
+                                </span>
+                                <span
+                                  className={`font-black text-[10.5px] ${
+                                    supabaseControls.control_mode === 'AUTO' || supabaseControls.air_dingin
+                                      ? 'text-sky-700'
+                                      : 'text-slate-500'
+                                  }`}
+                                >
+                                  {supabaseControls.control_mode === 'AUTO' || supabaseControls.air_dingin ? 'AKTIF' : 'TERTUTUP'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 font-medium pt-1">
+                                Mengatur aliran air pendingin masuk ke pipa penukar panas.
+                              </p>
+                            </div>
                           </div>
+
+                          <p className="text-[10px] text-slate-500 font-medium px-0.5">
+                            *Pasokan fluida dingin untuk menyerap panas dari sirkuit utama.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -3092,22 +3808,6 @@ export default function FluidHEDashboard() {
                     />
 
                   </div>
-                </div>
-
-                {/* Bottom Emergency Action Bar */}
-                <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div className="text-xs text-slate-500">
-                    *Seluruh perintah kontrol di atas disinkronkan secara real-time ke mikrokontroler ESP32 alat fisik.
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={triggerEmergencyStop}
-                    disabled={emergencyStopped}
-                    className="w-full sm:w-auto px-6 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transform active:scale-95 transition"
-                  >
-                    <Power className="w-4 h-4" /> EMERGENCY STOP HEATER
-                  </button>
                 </div>
 
               </div>
@@ -3159,8 +3859,20 @@ export default function FluidHEDashboard() {
               setLogSearchQuery={setLogSearchQuery}
               isUploading={isUploading}
               handleExportAndUpload={handleExportAndUpload}
+              handleExportCurrentSessionExcel={handleExportCurrentSessionExcel}
+              handleExportAllClassesExcel={handleExportAllClassesExcel}
               handleCloudDriveAccess={handleCloudDriveAccess}
               exportPDFReport={exportPDFReport}
+              systemStatus={systemState}
+              currentSession={currentSession}
+              archivedSessions={archivedSessions}
+              selectedSessionId={selectedLogsSessionId}
+              setSelectedSessionId={setSelectedLogsSessionId}
+              onOpenStartup={() => setIsStartupModalOpen(true)}
+              currentUser={currentUser}
+              classFilter={classFilter}
+              setClassFilter={setClassFilter}
+              classesList={classesList}
             />
           )}
 
@@ -3214,10 +3926,24 @@ export default function FluidHEDashboard() {
             />
           )}
 
-
+          {/* TAB 7: MASTER DATA & SESSION MANAGER (ADMIN ONLY) */}
+          {activeTab === 'sessions' && currentUser.role === 'admin' && (
+            <SessionManagerTab
+              archivedSessions={archivedSessions}
+              currentSession={currentSession}
+              onRefreshSessions={() => fetchSessions(currentUser.role, currentUser.email, classFilter)}
+              onSelectSessionForLogs={(sessionId) => {
+                setSelectedLogsSessionId(sessionId);
+                setActiveTab('logs');
+              }}
+              onExportMasterExcel={handleExportAllClassesExcel}
+              onExportSessionExcel={handleExportCurrentSessionExcel}
+            />
+          )}
 
         </main>
       </div>
+      )}
 
       {/* ─── SECURE EMAIL OTP PASSWORD RESET MODAL (ACCESSIBLE FROM USER MANAGEMENT & PROFILE) ─── */}
       {isResetModalOpen && (
@@ -3517,101 +4243,118 @@ export default function FluidHEDashboard() {
       )}
 
       {/* ─── MOBILE BOTTOM TAB NAVIGATION BAR (SMARTPHONE FRIENDLY & HIGH TOUCH PRIORITY) ─── */}
-      <nav className="fixed bottom-0 inset-x-0 z-50 bg-white/98 backdrop-blur-md border-t border-slate-200/90 py-1 px-1.5 flex md:hidden justify-around items-center shadow-[0_-4px_25px_rgba(0,0,0,0.10)] no-print touch-manipulation select-none pointer-events-auto">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('dashboard');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'dashboard'
-            ? 'text-sky-600 font-extrabold bg-sky-50/80'
-            : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-            }`}
-        >
-          <Activity className="w-5 h-5 shrink-0" />
-          <span className="text-[10px]">Monitoring</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('control');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'control'
-            ? 'text-sky-600 font-extrabold bg-sky-50/80'
-            : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-            }`}
-        >
-          <Sliders className="w-5 h-5 shrink-0" />
-          <span className="text-[10px]">Kendali</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('logs');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'logs'
-            ? 'text-sky-600 font-extrabold bg-sky-50/80'
-            : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-            }`}
-        >
-          <FileText className="w-5 h-5 shrink-0" />
-          <span className="text-[10px]">Data Log</span>
-        </button>
-
-        {currentUser.role === 'admin' ? (
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('cctv');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'cctv'
-                ? 'text-sky-600 font-extrabold bg-sky-50/80'
-                : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-                }`}
-            >
-              <Video className="w-5 h-5 shrink-0" />
-              <span className="text-[10px]">CCTV</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('users');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'users'
-                ? 'text-sky-600 font-extrabold bg-sky-50/80'
-                : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-                }`}
-            >
-              <Users className="w-5 h-5 shrink-0" />
-              <span className="text-[10px]">Users</span>
-            </button>
-          </>
-        ) : (
+      {systemState === 'ACTIVE' && (
+        <nav className="fixed bottom-0 inset-x-0 z-50 bg-white/98 backdrop-blur-md border-t border-slate-200/90 py-1 px-1.5 flex md:hidden justify-around items-center shadow-[0_-4px_25px_rgba(0,0,0,0.10)] no-print touch-manipulation select-none pointer-events-auto">
           <button
             type="button"
             onClick={() => {
-              setActiveTab('alarms');
+              setActiveTab('dashboard');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'alarms'
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'dashboard'
               ? 'text-sky-600 font-extrabold bg-sky-50/80'
               : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
               }`}
           >
-            <Bell className="w-5 h-5 shrink-0" />
-            <span className="text-[10px]">Alarm</span>
+            <Activity className="w-5 h-5 shrink-0" />
+            <span className="text-[10px]">Monitoring</span>
           </button>
-        )}
-      </nav>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('control');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'control'
+              ? 'text-sky-600 font-extrabold bg-sky-50/80'
+              : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+              }`}
+          >
+            <Sliders className="w-5 h-5 shrink-0" />
+            <span className="text-[10px]">Kontrol</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('logs');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'logs'
+              ? 'text-sky-600 font-extrabold bg-sky-50/80'
+              : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+              }`}
+          >
+            <FileText className="w-5 h-5 shrink-0" />
+            <span className="text-[10px]">Laporan</span>
+          </button>
+
+          {currentUser.role === 'admin' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('sessions');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'sessions'
+                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                  : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+                  }`}
+              >
+                <FolderKanban className="w-5 h-5 shrink-0" />
+                <span className="text-[10px]">Data Lab</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('cctv');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'cctv'
+                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                  : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+                  }`}
+              >
+                <Video className="w-5 h-5 shrink-0" />
+                <span className="text-[10px]">CCTV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('users');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'users'
+                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                  : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+                  }`}
+              >
+                <Users className="w-5 h-5 shrink-0" />
+                <span className="text-[10px]">Users</span>
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('alarms');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'alarms'
+                ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+                }`}
+            >
+              <Bell className="w-5 h-5 shrink-0" />
+              <span className="text-[10px]">Alarm</span>
+            </button>
+          )}
+        </nav>
+      )}
 
       {/* ─── MODAL CLOUD DRIVE EXPLORER & FLASHDISK PROTECTION NOTICE ─── */}
       {isCloudDriveModalOpen && (
@@ -3826,11 +4569,50 @@ export default function FluidHEDashboard() {
           </div>
         </div>
       )}
+
+      {/* ─── SYSTEM STARTUP & READINESS MODAL ─── */}
+      <SystemStartupModal
+        isOpen={isStartupModalOpen}
+        onClose={() => setIsStartupModalOpen(false)}
+        onConfirmStartup={handleConfirmStartup}
+        operatorName={currentUser?.name || 'Operator'}
+        defaultFlowMode={operationMode}
+      />
+
+      {/* ─── SESSION SUMMARY & SAFE SHUTDOWN MODAL ─── */}
+      <SessionSummaryModal
+        isOpen={isEndSessionModalOpen}
+        onClose={() => setIsEndSessionModalOpen(false)}
+        onConfirmEndSession={handleConfirmEndSession}
+        onExportExcel={handleExportCurrentSessionExcel}
+        currentSession={currentSession}
+        sessionDuration={sessionDuration}
+      />
+
+      {/* ─── LOGOUT & SYSTEM SHUTDOWN CONFIRMATION MODAL ─── */}
+      <LogoutConfirmModal
+        isOpen={isLogoutConfirmModalOpen}
+        onClose={() => {
+          if (!isLoggingOutWithShutdown) {
+            setIsLogoutConfirmModalOpen(false);
+          }
+        }}
+        onConfirmLogoutOnly={handleLogoutOnly}
+        onConfirmShutdownAndLogout={handleConfirmShutdownAndLogout}
+        systemState={systemState}
+        currentSession={currentSession}
+        sessionDuration={sessionDuration}
+        userName={currentUser?.name}
+        userRole={currentUser?.role}
+        isShuttingDown={isLoggingOutWithShutdown}
+      />
+
       <GuidedTour
         isOpen={isTourOpen}
         onClose={() => setIsTourOpen(false)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        userRole={currentUser?.role || 'operator'}
       />
 
     </div>

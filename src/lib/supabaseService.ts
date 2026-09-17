@@ -1,6 +1,7 @@
 import {
   TelemetryRow,
-  DeviceControlsRow
+  DeviceControlsRow,
+  ControlMode
 } from '@/types';
 import { getStoredAnonKey } from './supabase';
 
@@ -98,17 +99,83 @@ export const supabaseControlService = {
     return updateDeviceControls({ flow_mode: flowMode });
   },
 
-  // 2. Switch Control Mode ("AUTO" / "MANUAL")
-  setControlMode: async (controlMode: 'AUTO' | 'MANUAL') => {
+  // 2. Switch Control Mode ("AUTO" | "MANUAL" | "STANDBY" | "KALIBRASI" | "SHUTDOWN")
+  setControlMode: async (controlMode: 'AUTO' | 'MANUAL' | 'STANDBY' | 'KALIBRASI' | 'SHUTDOWN') => {
     if (controlMode === 'AUTO') {
-      // In AUTO mode: flow mode is COUNTER, Solenoid Air Dingin is ALWAYS OPEN (true)
       return updateDeviceControls({
         control_mode: 'AUTO',
         flow_mode: 'COUNTER',
         air_dingin: true
       });
     }
-    return updateDeviceControls({ control_mode: 'MANUAL' });
+    if (controlMode === 'STANDBY') {
+      return updateDeviceControls({
+        control_mode: 'STANDBY',
+        btn_onoff: false,
+        heater_1_status: false,
+        heater_2_status: false,
+        heater_status: false,
+        air_dingin: false,
+        pompa_ekstra: false,
+        uap_status: false,
+        servo_angle: 0,
+        servo_angle_2: 0,
+        flow_mode: 'COUNTER',
+      });
+    }
+    return updateDeviceControls({ control_mode: controlMode });
+  },
+
+  // 2b. Sistem On / Off Terintegrasi Sinkron dengan Firmware ESP32
+  startSystem: async (mode: ControlMode = 'AUTO') => {
+    return updateDeviceControls({
+      control_mode: mode,
+      btn_onoff: true,
+      heater_1_status: true,
+      heater_2_status: true,
+      heater_status: true,
+      air_dingin: true,
+      pompa_ekstra: true,
+      uap_status: false,
+      flow_mode: 'COUNTER',
+      servo_angle: 100,
+      servo_angle_2: 100,
+    });
+  },
+
+  shutdownSystem: async () => {
+    return updateDeviceControls({
+      control_mode: 'SHUTDOWN',
+      btn_onoff: false,
+      heater_1_status: false,
+      heater_2_status: false,
+      heater_status: false,
+      air_dingin: false,
+      pompa_ekstra: false,
+      uap_status: false,
+      servo_angle: 0,
+      servo_angle_2: 0,
+      flow_mode: 'COUNTER',
+    });
+  },
+
+  emergencyShutdown: async () => {
+    return updateDeviceControls({
+      control_mode: 'STANDBY',
+      btn_onoff: false,
+      heater_1_status: false,
+      heater_2_status: false,
+      heater_status: false,
+      air_dingin: false,
+      pompa_ekstra: false,
+      uap_status: false,
+      servo_angle: 0,
+      servo_angle_2: 0,
+    });
+  },
+
+  triggerPowerPush: async () => {
+    return updateDeviceControls({ trigger_power: true });
   },
 
   // 3. Tombol Heater 1 & 2 Power Terpisah Sesuai ESP32
@@ -135,6 +202,13 @@ export const supabaseControlService = {
   setTargetTemp: async (targetTemp: number) => {
     const parsedFloat = parseFloat(targetTemp.toFixed(1));
     return updateDeviceControls({ target_temp: parsedFloat });
+  },
+
+  // 4b. Thermostat Limits Histeresis Heater 2 (target_upper & target_lower)
+  setThermostatLimits: async (targetUpper: number, targetLower: number) => {
+    const up = parseFloat(targetUpper.toFixed(1));
+    const low = parseFloat(targetLower.toFixed(1));
+    return updateDeviceControls({ target_upper: up, target_lower: low });
   },
 
   // 5. Motorized Valve 1 (Panas) & Valve 2 (Dingin)
@@ -174,13 +248,13 @@ export const supabaseControlService = {
   },
 
   setUapIntervalMin: async (intervalMin: number) => {
-    const clamped = Math.min(30, Math.max(5, Math.round(intervalMin)));
+    const clamped = Math.min(60, Math.max(1, Math.round(intervalMin)));
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('he_uap_interval_min', String(clamped));
       } catch (e) {}
     }
-    return { success: true, data: null, error: null };
+    return updateDeviceControls({ uap_interval_min: clamped });
   },
 
   setUapDurationSec: async (durationSec: number) => {
@@ -191,6 +265,11 @@ export const supabaseControlService = {
   // 8. Toggle Katup Air Dingin (boolean true / false)
   setAirDinginStatus: async (airDinginStatus: boolean) => {
     return updateDeviceControls({ air_dingin: airDinginStatus });
+  },
+
+  // 8b. Toggle Pompa Sirkulasi Air Panas (boolean true / false)
+  setPompaStatus: async (pompaStatus: boolean) => {
+    return updateDeviceControls({ pompa_ekstra: pompaStatus });
   },
 
   // 9. Step Buttons UP/DOWN (Increment step_up_count / step_down_count & pulse momentary)

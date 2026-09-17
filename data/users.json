@@ -2,11 +2,11 @@
   "users": [
     {
       "id": "USR-01",
-      "name": "Admin",
+      "name": "Admin Satu",
       "email": "anugrahtriplecycle@gmail.com",
       "role": "admin",
       "status": "Active",
-      "lastLogin": "2026-09-06T19:01:47.374Z",
+      "lastLogin": "2026-09-17T04:56:37.044Z",
       "isScheduleRestricted": false,
       "allowedStartDate": "2026-08-26",
       "allowedEndDate": "2026-08-31",
@@ -19,7 +19,7 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1788722118062
+      "lastSeen": 0
     },
     {
       "id": "USR-02",
@@ -27,8 +27,8 @@
       "email": "dwimeliantiistiqomah55@gmail.com",
       "role": "operator",
       "status": "Active",
-      "lastLogin": "2026-09-06T03:15:18.859Z",
-      "isScheduleRestricted": true,
+      "lastLogin": "2026-09-17T03:20:08.445Z",
+      "isScheduleRestricted": false,
       "allowedStartDate": "2026-09-05",
       "allowedEndDate": "2026-09-05",
       "allowedDays": [
@@ -38,18 +38,18 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 0
+      "lastSeen": 1789619826254
     },
     {
-      "id": "USR-03",
-      "name": "melvin",
-      "email": "dapilsatudys@gmail.com",
-      "role": "operator",
+      "id": "USR-04",
+      "name": "Admin 2",
+      "email": "mr.winkyy23@gmail.com",
+      "role": "admin",
       "status": "Active",
-      "lastLogin": "2026-09-05T07:50:18.428Z",
-      "isScheduleRestricted": true,
-      "allowedStartDate": "2026-09-05",
-      "allowedEndDate": "2026-09-05",
+      "lastLogin": "Belum Pernah",
+      "isScheduleRestricted": false,
+      "allowedStartDate": "2026-09-07",
+      "allowedEndDate": "2026-09-07",
       "allowedDays": [
         "Senin",
         "Selasa",
@@ -58,14 +58,13 @@
         "Jumat"
       ],
       "allowedStartTime": "07:00",
-      "allowedEndTime": "22:00",
-      "lastSeen": 0
+      "allowedEndTime": "18:00"
     }
   ],
   "passwords": {
     "dwimeliantiistiqomah55@gmail.com": "Melchan5.",
     "admin@uad.ac.id": "admin123",
     "anugrahtriplecycle@gmail.com": "gsxjGzxe",
-    "dapilsatudys@gmail.com": "Coba123."
+    "mr.winkyy23@gmail.com": "ND4mKYxB"
   }
 }

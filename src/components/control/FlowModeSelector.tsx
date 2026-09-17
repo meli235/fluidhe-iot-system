@@ -144,7 +144,7 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
           </span>
         ) : (
           <span className="text-[9.5px] sm:text-[10px] text-slate-500 font-semibold shrink-0 whitespace-nowrap">
-            Status: <strong className="text-sky-700">{isCounter ? 'COUNTER' : 'CO-CURRENT'}</strong>
+            Status: <strong className="text-sky-700">{isCounter ? 'COUNTER-CURRENT' : 'CO-CURRENT'}</strong>
           </span>
         )}
       </div>
@@ -183,7 +183,7 @@ export const FlowModeSelector: React.FC<FlowModeSelectorProps> = ({
           }`}
         >
           <ArrowRightLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-          <span>Counter</span>
+          <span>Counter-Current</span>
         </button>
       </div>
     </div>

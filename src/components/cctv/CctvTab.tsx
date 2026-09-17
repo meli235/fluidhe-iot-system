@@ -77,7 +77,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
   latestData
 }) => {
   return (
-    <div className="space-y-6">
+    <div id="tour-cctv-tab" className="space-y-6">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
@@ -361,10 +361,11 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                 onClick={() => {
                   const nextMuted = !cctvAudioMuted;
                   setCctvAudioMuted(nextMuted);
+                  setAudioUserActivated(!nextMuted);
                   if (videoRef.current) {
                     videoRef.current.muted = nextMuted;
                     if (!nextMuted) {
-                      videoRef.current.volume = cctvVolume / 100;
+                      videoRef.current.volume = (cctvVolume || 100) / 100;
                       videoRef.current.play().catch((err) => console.log('Audio play error:', err));
                     }
                   }

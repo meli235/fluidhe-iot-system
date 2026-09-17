@@ -2,9 +2,10 @@
 
 import React from 'react';
 import { Flame, Droplets, Activity, Gauge } from 'lucide-react';
+import { ControlMode } from '@/types';
 
 interface FlowAndValvesControlProps {
-  controlMode: 'AUTO' | 'MANUAL';
+  controlMode: ControlMode;
   emergencyStopped?: boolean;
   // FC1 (Hot Valve)
   fc1Valve: number;
@@ -46,7 +47,7 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
 
         {isAuto && (
           <span className="text-[9px] sm:text-[10px] text-sky-800 font-extrabold bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200 shadow-2xs flex items-center gap-1">
-            <Activity className="w-3 h-3 text-sky-600 animate-spin" />
+            <Activity className="w-3 h-3 text-sky-600" />
             Mode AUTO
           </span>
         )}

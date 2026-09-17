@@ -1,0 +1,351 @@
+import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+import { SystemSession } from '@/types';
+
+const DATA_DIR = path.join(process.cwd(), 'data');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+
+function readSessionsDatabase(): { sessions: SystemSession[] } {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(SESSIONS_FILE)) {
+      const initial = { sessions: [] };
+      fs.writeFileSync(SESSIONS_FILE, JSON.stringify(initial, null, 2), 'utf-8');
+      return initial;
+    }
+    const raw = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.sessions)) {
+      return { sessions: [] };
+    }
+    return parsed;
+  } catch (err) {
+    console.error('[Sessions API] Error reading sessions database:', err);
+    return { sessions: [] };
+  }
+}
+
+function writeSessionsDatabase(data: { sessions: SystemSession[] }): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('[Sessions API] Error writing sessions database:', err);
+    return false;
+  }
+}
+
+// ─── GET: Ambil Sesi dengan Role-Based Data Segregation ───
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const role = (searchParams.get('role') || 'operator').toLowerCase();
+    const email = (searchParams.get('email') || '').toLowerCase().trim();
+    const classFilter = searchParams.get('classFilter') || 'ALL';
+    const sessionId = searchParams.get('sessionId');
+
+    const db = readSessionsDatabase();
+    
+    // Sinkronkan nama pengguna secara dinamis dari master users.json
+    const usersFilePath = path.join(DATA_DIR, 'users.json');
+    const userMap = new Map<string, string>();
+    try {
+      if (fs.existsSync(usersFilePath)) {
+        const uRaw = fs.readFileSync(usersFilePath, 'utf-8');
+        const uParsed = JSON.parse(uRaw);
+        if (uParsed && Array.isArray(uParsed.users)) {
+          uParsed.users.forEach((u: any) => {
+            if (u.email && u.name) {
+              userMap.set(u.email.toLowerCase().trim(), u.name.trim());
+            }
+          });
+        }
+      }
+    } catch (e) {}
+
+    const allSessions = db.sessions.map((s) => {
+      const emailKey = s.operatorEmail?.toLowerCase().trim();
+      if (emailKey && userMap.has(emailKey)) {
+        return {
+          ...s,
+          operatorName: userMap.get(emailKey)!
+        };
+      }
+      return s;
+    });
+
+    if (role === 'admin') {
+      // ADMIN: Akses penuh ke seluruh data dari semua kelas & tanggal
+      let filtered = [...allSessions];
+
+      if (sessionId) {
+        filtered = filtered.filter((s) => s.id === sessionId);
+      } else if (classFilter && classFilter !== 'ALL') {
+        filtered = filtered.filter(
+          (s) =>
+            (s.operatorEmail && s.operatorEmail.toLowerCase() === classFilter.toLowerCase()) ||
+            (s.classGroup && s.classGroup.toLowerCase() === classFilter.toLowerCase()) ||
+            (s.operatorName && s.operatorName.toLowerCase() === classFilter.toLowerCase())
+        );
+      }
+
+      // Bangun daftar agregat kelas untuk opsi filter Admin
+      const classMap = new Map<string, { operatorEmail: string; operatorName: string; classGroup?: string; count: number }>();
+      allSessions.forEach((s) => {
+        const emailKey = s.operatorEmail?.toLowerCase().trim();
+        const currentName = (emailKey && userMap.has(emailKey)) ? userMap.get(emailKey)! : s.operatorName;
+        const key = emailKey || currentName.toLowerCase();
+        
+        if (!classMap.has(key)) {
+          classMap.set(key, {
+            operatorEmail: s.operatorEmail || '',
+            operatorName: currentName,
+            classGroup: (s.classGroup && s.classGroup.toLowerCase() !== currentName.toLowerCase()) ? s.classGroup : undefined,
+            count: 1
+          });
+        } else {
+          const item = classMap.get(key)!;
+          item.count += 1;
+        }
+      });
+
+      const totalDataPoints = allSessions.reduce((acc, s) => acc + (s.pointsCount || (s.data ? s.data.length : 0)), 0);
+
+      return NextResponse.json({
+        success: true,
+        isAdmin: true,
+        sessions: filtered,
+        totalSessions: allSessions.length,
+        filteredCount: filtered.length,
+        totalDataPoints,
+        classesList: Array.from(classMap.values())
+      });
+    } else {
+      // OPERATOR: Segregasi Ketat! Hanya bisa mengakses data kelas mereka sendiri
+      if (!email) {
+        return NextResponse.json({
+          success: true,
+          isAdmin: false,
+          sessions: [],
+          totalSessions: 0,
+          message: 'Email operator belum terdefinisi'
+        });
+      }
+
+      let operatorSessions = allSessions.filter(
+        (s) => s.operatorEmail && s.operatorEmail.toLowerCase() === email
+      );
+
+      if (sessionId) {
+        operatorSessions = operatorSessions.filter((s) => s.id === sessionId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        isAdmin: false,
+        sessions: operatorSessions,
+        totalSessions: operatorSessions.length
+      });
+    }
+  } catch (err: any) {
+    console.error('[Sessions API] GET handler error:', err);
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Gagal memuat arsip sesi' },
+      { status: 500 }
+    );
+  }
+}
+
+// ─── POST: Simpan atau Perbarui Sesi Praktikum ───
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const session: SystemSession = body.session;
+
+    if (!session || !session.id) {
+      return NextResponse.json(
+        { success: false, error: 'Data sesi tidak valid atau ID sesi kosong' },
+        { status: 400 }
+      );
+    }
+
+    const db = readSessionsDatabase();
+    const existingIndex = db.sessions.findIndex((s) => s.id === session.id);
+
+    if (existingIndex >= 0) {
+      // Update existing session
+      db.sessions[existingIndex] = {
+        ...db.sessions[existingIndex],
+        ...session,
+        pointsCount: session.pointsCount || (session.data ? session.data.length : 0)
+      };
+    } else {
+      // Insert new session (di posisi awal / terbaru)
+      db.sessions.unshift({
+        ...session,
+        pointsCount: session.pointsCount || (session.data ? session.data.length : 0)
+      });
+    }
+
+    const saved = writeSessionsDatabase(db);
+    if (!saved) {
+      return NextResponse.json(
+        { success: false, error: 'Gagal menulis data sesi ke server' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Sesi praktikum berhasil diarsipkan di server',
+      savedSessionId: session.id,
+      totalSessionsNow: db.sessions.length
+    });
+  } catch (err: any) {
+    console.error('[Sessions API] POST handler error:', err);
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Gagal menyimpan sesi praktikum' },
+      { status: 500 }
+    );
+  }
+}
+
+// ─── PATCH: Edit Metadata Sesi Praktikum (Otorisasi Khusus Admin) ───
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { sessionId, title, classGroup, operatorName, date, role } = body;
+
+    if (role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Hanya Admin yang memiliki hak akses mengedit metadata sesi' },
+        { status: 403 }
+      );
+    }
+
+    if (!sessionId) {
+      return NextResponse.json(
+        { success: false, error: 'ID sesi wajib dicantumkan' },
+        { status: 400 }
+      );
+    }
+
+    const db = readSessionsDatabase();
+    const idx = db.sessions.findIndex((s) => s.id === sessionId);
+
+    if (idx < 0) {
+      return NextResponse.json({ success: false, error: 'Sesi tidak ditemukan' }, { status: 404 });
+    }
+
+    // Update metadata
+    if (title !== undefined) db.sessions[idx].title = title;
+    if (classGroup !== undefined) db.sessions[idx].classGroup = classGroup;
+    if (operatorName !== undefined) db.sessions[idx].operatorName = operatorName;
+    if (date !== undefined) db.sessions[idx].date = date;
+
+    writeSessionsDatabase(db);
+
+    return NextResponse.json({
+      success: true,
+      message: `Sesi ${sessionId} berhasil diperbarui`,
+      updatedSession: db.sessions[idx]
+    });
+  } catch (err: any) {
+    console.error('[Sessions API] PATCH handler error:', err);
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Gagal memperbarui sesi' },
+      { status: 500 }
+    );
+  }
+}
+
+// ─── DELETE: Hapus Sesi Tunggal / Massal (Otorisasi Khusus Admin) ───
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    let role = searchParams.get('role');
+    let sessionId = searchParams.get('sessionId');
+    const sessionIdsParam = searchParams.get('sessionIds');
+    let sessionIds: string[] = [];
+
+    // Jika ada JSON body di DELETE request
+    try {
+      const contentType = req.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const body = await req.json();
+        if (body.role) role = body.role;
+        if (body.sessionId) sessionId = body.sessionId;
+        if (Array.isArray(body.sessionIds)) {
+          sessionIds = body.sessionIds;
+        }
+      }
+    } catch (e) {}
+
+    if (sessionIdsParam) {
+      sessionIds = sessionIdsParam.split(',').map((id) => id.trim()).filter(Boolean);
+    } else if (sessionId && sessionIds.length === 0) {
+      sessionIds = [sessionId];
+    }
+
+    if (role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Hanya Admin yang memiliki hak akses menghapus arsip praktikum' },
+        { status: 403 }
+      );
+    }
+
+    if (sessionIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'ID sesi atau daftar ID sesi wajib dicantumkan' },
+        { status: 400 }
+      );
+    }
+
+    const db = readSessionsDatabase();
+
+    // Khusus pembersihan data contoh/dummy jika dipanggil
+    if (sessionIds.includes('CLEAR_DUMMY')) {
+      const beforeCount = db.sessions.length;
+      db.sessions = db.sessions.filter(
+        (s) =>
+          !s.classGroup?.includes('Kelas Praktikum') &&
+          s.id !== 'SES-20260907-091530' &&
+          s.id !== 'SES-20260907-133000'
+      );
+      writeSessionsDatabase(db);
+      return NextResponse.json({
+        success: true,
+        message: `Berhasil membersihkan ${beforeCount - db.sessions.length} sesi dummy`,
+        remainingCount: db.sessions.length
+      });
+    }
+
+    const targetSet = new Set(sessionIds);
+    const initialLen = db.sessions.length;
+    db.sessions = db.sessions.filter((s) => !targetSet.has(s.id));
+    const deletedCount = initialLen - db.sessions.length;
+
+    if (deletedCount === 0) {
+      return NextResponse.json({ success: false, error: 'Sesi yang dipilih tidak ditemukan' }, { status: 404 });
+    }
+
+    writeSessionsDatabase(db);
+    return NextResponse.json({
+      success: true,
+      message: deletedCount === 1 
+        ? `Sesi ${sessionIds[0]} berhasil dihapus`
+        : `Berhasil menghapus ${deletedCount} sesi praktikum`,
+      deletedCount
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Error' }, { status: 500 });
+  }
+}
+
+

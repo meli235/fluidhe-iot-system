@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const endMins = (endMinutesNum % 60).toString().padStart(2, '0');
     const endTime = `${dateFormatted}T${endHours}${endMins}00Z`;
 
-    const camIp = '192.168.1.14';
+    const camIp = '192.168.1.10';
     const camPass = 'Eva1Yosep2';
     // Verified working Hikvision/EZVIZ MicroSD playback track path
     const rtspPlaybackUrl = `rtsp://admin:${camPass}@${camIp}:554/Streaming/Channels/101?starttime=${startTime}&endtime=${endTime}#backchannel=0`;

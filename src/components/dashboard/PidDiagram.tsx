@@ -11,6 +11,7 @@ import {
   Activity,
   CheckCircle2,
   Info,
+  ChevronDown,
   Wind
 } from 'lucide-react';
 
@@ -48,6 +49,7 @@ interface PidDiagramProps {
   fc2Valve?: number;
   uapStatus?: boolean;
   airDinginStatus?: boolean;
+  pompaStatus?: boolean;
   dualHeaterState: DualHeaterDisplayState;
   solenoidValves?: SolenoidValvesState;
   deltaPHot: number;
@@ -64,21 +66,26 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
   fc2Valve = 60,
   uapStatus = false,
   airDinginStatus = true,
+  pompaStatus = false,
   dualHeaterState,
   deltaPHot,
   onHoverSensor
 }) => {
-  // Accordion defaulted to false so user is not overwhelmed with text
-  const [showHardwareMap, setShowHardwareMap] = useState<boolean>(false);
   const [hoveredComponent, setHoveredComponent] = useState<string | null>(null);
+  const [showLegend, setShowLegend] = useState<boolean>(false);
 
   const isCounter = diagramMode === 'Counter-Current';
 
   // 4 Thermostats (Suhu T1 - T4)
-  const thi = Number(latestData.ti1 || 0);
-  const tho = Number(latestData.ti2 || 0);
-  const tci = Number(latestData.ti3 || 0);
-  const tco = Number(latestData.ti4 || 0);
+  // Air Dingin: Selalu T3 = Inlet, T2 = Outlet
+  const tci = Number(latestData.ti3 || 0); // Cold In
+  const tco = Number(latestData.ti2 || 0); // Cold Out
+
+  // Air Panas:
+  // Counter: T1 = Hot In, T4 = Hot Out
+  // Co-Current: T4 = Hot In, T1 = Hot Out
+  const thi = isCounter ? Number(latestData.ti1 || 0) : Number(latestData.ti4 || 0);
+  const tho = isCounter ? Number(latestData.ti4 || 0) : Number(latestData.ti1 || 0);
 
   // 4 Pressure Sensors (Tekanan P1 - P4)
   const pi1Val = Number(latestData.pi1 || 0).toFixed(2);
@@ -116,7 +123,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
               P&ID Diagram — Shell & Tube Heat Exchanger
             </h4>
             <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
-              4 Thermostats • 4 Pressure Sensors • 2 Flow Meters • 2 Heaters • Valves (VL)
+              Pemantauan Aliran Real-time & Visualisasi Instrumentasi Sistem
             </p>
           </div>
         </div>
@@ -140,7 +147,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
               }`}
           >
             <Wind className={`w-3 h-3 ${uapStatus ? 'text-amber-600' : 'text-slate-400'}`} />
-            Katup Uap: {uapStatus ? 'VENTING' : 'CLOSED'}
+            Vapor Solenoid: {uapStatus ? 'VENTING' : 'CLOSED'}
           </span>
 
           {/* Cold Solenoid Valve Pill */}
@@ -153,135 +160,8 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <Droplets className={`w-3 h-3 ${airDinginStatus ? 'text-sky-600' : 'text-slate-400'}`} />
             Solenoid: {airDinginStatus ? 'OPEN' : 'CLOSED'}
           </span>
-
-          {/* Toggle Hardware Mapping Accordion */}
-          <button
-            type="button"
-            onClick={() => setShowHardwareMap((prev) => !prev)}
-            className="px-2.5 py-1 rounded-xl text-[10px] sm:text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all cursor-pointer flex items-center gap-1"
-          >
-            <Info className="w-3 h-3 text-sky-600" />
-            {showHardwareMap ? 'Tutup Keterangan Notasi' : 'Keterangan Sensor'}
-          </button>
         </div>
       </div>
-
-      {/* ─── KETERANGAN SINGKAT SENSOR & SIMBOL (SESUAI BENTUK VISUAL) ─── */}
-      {showHardwareMap && (
-        <div className="p-2.5 sm:p-3 bg-white/95 rounded-xl border border-slate-200 shadow-xs space-y-2 text-[11px] animate-fadeIn">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {/* T1 & P1 */}
-            <div className="p-2 rounded-xl bg-orange-50/70 border border-orange-200/80 flex items-center gap-2.5">
-              <div className="flex items-center -space-x-1 shrink-0">
-                <span className="w-6 h-6 rounded-full bg-red-500 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  T1
-                </span>
-                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  P1
-                </span>
-              </div>
-              <div>
-                <strong className="block text-slate-900 font-black text-[11px] leading-tight">T1 & P1 (Left Inlet)</strong>
-                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Air Panas Masuk</span>
-              </div>
-            </div>
-
-            {/* Tr & Pr */}
-            <div className="p-2 rounded-xl bg-rose-50/70 border border-rose-200/80 flex items-center gap-2.5">
-              <div className="flex items-center -space-x-1 shrink-0">
-                <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  Tr
-                </span>
-                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  Pr
-                </span>
-              </div>
-              <div>
-                <strong className="block text-slate-900 font-black text-[11px] leading-tight">Tr & Pr (Cold Outlet)</strong>
-                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Cangkang (Shell)</span>
-              </div>
-            </div>
-
-            {/* T3 & P3 */}
-            <div className="p-2 rounded-xl bg-cyan-50/70 border border-cyan-200/80 flex items-center gap-2.5">
-              <div className="flex items-center -space-x-1 shrink-0">
-                <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  T3
-                </span>
-                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  P3
-                </span>
-              </div>
-              <div>
-                <strong className="block text-slate-900 font-black text-[11px] leading-tight">T3 & P3 (Cold Inlet)</strong>
-                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Air Dingin Masuk</span>
-              </div>
-            </div>
-
-            {/* T4 & P4 */}
-            <div className="p-2 rounded-xl bg-sky-50/70 border border-sky-200/80 flex items-center gap-2.5">
-              <div className="flex items-center -space-x-1 shrink-0">
-                <span className="w-6 h-6 rounded-full bg-red-500 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  T4
-                </span>
-                <span className="w-6 h-6 rounded-full bg-sky-600 text-white font-black text-[9.5px] flex items-center justify-center border-2 border-white shadow-xs">
-                  P4
-                </span>
-              </div>
-              <div>
-                <strong className="block text-slate-900 font-black text-[11px] leading-tight">T4 & P4 (Right Header)</strong>
-                <span className="text-[10px] text-slate-600 leading-tight block">Suhu & Tekanan Header Kanan</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Simbol Visual Miniatur */}
-          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-600 pt-1.5 border-t border-slate-100">
-            <span className="font-black text-slate-700">Simbol:</span>
-
-            {/* VL */}
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
-              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" fill="#FEFCE8" stroke="#B45309" strokeWidth="1.5" />
-                <polygon points="6,7 12,12 6,17" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
-                <polygon points="18,7 12,12 18,17" fill="#EAB308" stroke="#B45309" strokeWidth="1" />
-                <circle cx="12" cy="12" r="2" fill="#92400E" />
-              </svg>
-              <span><strong>VL:</strong> Katup Manual</span>
-            </div>
-
-            {/* Flow Control */}
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-50 border border-orange-200 text-orange-900">
-              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 20">
-                <rect x="1" y="1" width="22" height="18" rx="4" fill="#F97316" stroke="#C2410C" strokeWidth="1.5" />
-                <rect x="4" y="4" width="16" height="8" rx="2" fill="#FFFFFF" />
-              </svg>
-              <span><strong>Flow Control:</strong> Debit Aliran (L/m)</span>
-            </div>
-
-            {/* Solenoid */}
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800">
-              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                <rect x="2" y="13" width="20" height="9" rx="2" fill="#94A3B8" stroke="#475569" strokeWidth="1" />
-                <polygon points="2,13 12,17.5 2,22" fill="#64748B" />
-                <polygon points="22,13 12,17.5 22,22" fill="#64748B" />
-                <rect x="10" y="8" width="4" height="6" fill="#475569" />
-                <rect x="6" y="2" width="12" height="7" rx="1.5" fill="#1E293B" stroke="#0F172A" strokeWidth="1" />
-              </svg>
-              <span><strong>Solenoid:</strong> Katup Otomatis</span>
-            </div>
-
-            {/* Katup Uap */}
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-900">
-              <svg className="w-3 h-3.5 shrink-0" viewBox="0 0 20 20">
-                <rect x="7" y="10" width="6" height="8" fill="#0284C7" />
-                <rect x="4" y="3" width="12" height="7" rx="1.5" fill="#0EA5E9" stroke="#0369A1" strokeWidth="1" />
-              </svg>
-              <span><strong>Katup Uap:</strong> Pelepas Uap</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ─── INTERACTIVE DIGITAL TWIN P&ID SVG SCHEMATIC (BERSIH & SESUAI SKETSA) ─── */}
       <div className="w-full overflow-x-auto py-2 bg-white rounded-2xl border border-slate-200/90 p-2 sm:p-4 shadow-inner">
@@ -409,14 +289,16 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             onMouseEnter={() => handleHover('PUMP_HOT')}
             onMouseLeave={() => handleHover(null)}
           >
-            <circle cx="176" cy="175" r="16" fill="#FFFFFF" stroke="#EA580C" strokeWidth="2" />
+            <circle cx="176" cy="175" r="16" fill={pompaStatus ? '#ECFDF5' : '#FFFFFF'} stroke={pompaStatus ? '#10B981' : '#EA580C'} strokeWidth={pompaStatus ? '2.5' : '2'} />
             <path
               d="M 176,162 L 176,188 M 163,175 L 189,175 M 167,166 L 185,184 M 167,184 L 185,166"
-              stroke="#EA580C"
+              stroke={pompaStatus ? '#059669' : '#EA580C'}
               strokeWidth="1.5"
+              className={pompaStatus ? 'animate-spin' : ''}
+              style={{ transformOrigin: '176px 175px', animationDuration: '2.5s' }}
             />
-            <text x="176" y="202" textAnchor="middle" className="text-[7.5px] font-black fill-slate-700">
-              Pump
+            <text x="176" y="202" textAnchor="middle" className={`text-[7.5px] font-black ${pompaStatus ? 'fill-emerald-700 font-bold' : 'fill-slate-700'}`}>
+              Pump {pompaStatus ? '(ON)' : ''}
             </text>
           </g>
 
@@ -732,16 +614,16 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
           {/* ═══════════════════════════════════════════════════════════════════════════
               8. RELIEF VALVES (Katup Panas di Header & Katup Uap di Cangkang)
           ═══════════════════════════════════════════════════════════════════════════ */}
-          {/* Katup Panas Kiri */}
+          {/* Hot Release Solenoid Kiri */}
           <g className="cursor-pointer" onMouseEnter={() => handleHover('KATUP_PANAS_KIRI')} onMouseLeave={() => handleHover(null)}>
             <rect x="252" y="222" width="12" height="18" rx="2" fill="#7C3AED" />
             <polygon points="258,222 253,214 263,214" fill="#A855F7" />
             <text x="258" y="208" textAnchor="middle" className="text-[7px] font-bold fill-purple-900">
-              Katup Panas
+              Hot Release Solenoid
             </text>
           </g>
 
-          {/* Katup Uap (Solenoid Steam Relief Valve) — Ukuran kecil sama persis dengan katup lainnya */}
+          {/* Vapor Release Solenoid (Steam Relief Valve) — Ukuran kecil sama persis dengan katup lainnya */}
           <g
             className="cursor-pointer transition hover:scale-110"
             onMouseEnter={() => handleHover('KATUP_UAP')}
@@ -765,22 +647,22 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
               textAnchor="middle"
               className={`text-[7px] font-bold ${uapStatus ? 'fill-amber-900 animate-pulse' : 'fill-sky-900'}`}
             >
-              Katup Uap
+              Vapor Release Solenoid
             </text>
           </g>
 
-          {/* Katup Panas Kanan */}
+          {/* Hot Release Solenoid Kanan */}
           <g className="cursor-pointer" onMouseEnter={() => handleHover('KATUP_PANAS_KANAN')} onMouseLeave={() => handleHover(null)}>
             <rect x="752" y="222" width="12" height="18" rx="2" fill="#7C3AED" />
             <polygon points="758,222 753,214 763,214" fill="#A855F7" />
             <text x="758" y="208" textAnchor="middle" className="text-[7px] font-bold fill-purple-900">
-              Katup Panas
+              Hot Release Solenoid
             </text>
           </g>
 
           {/* ═══════════════════════════════════════════════════════════════════════════
-              9. SENSOR KELUARAN DINGIN: Presur (Pr) & Termostar (Tr) DI BAWAH JALUR BIRU
-                 Sesuai foto ke 2: Terletak di atas nozzle/shell, di bawah pipa biru!
+              9. SENSOR KELUARAN DINGIN: Pr (Preasure) & Tr (Termostar) DI BAWAH JALUR BIRU
+                 Terletak di atas nozzle/shell, di bawah pipa biru
           ═══════════════════════════════════════════════════════════════════════════ */}
           <g className="cursor-pointer" onMouseEnter={() => handleHover('PORT_P2_T2')} onMouseLeave={() => handleHover(null)}>
             {/* Leader Lines dari Pipa Nozzle Atas (x=315, y=222) */}
@@ -788,23 +670,17 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <line x1="306" y1="213" x2="375" y2="213" stroke="#94A3B8" strokeWidth="1.5" />
             <circle cx="315" cy="222" r="2.5" fill="#64748B" />
 
-            {/* Preasure Pr (Kiri) — 2D Pill style */}
-            <text x="306" y="191" textAnchor="middle" className="text-[7.5px] font-black fill-sky-900">
-              Preasure
-            </text>
+            {/* P2 (Pressure Nozzle) — 2D Pill style */}
             <rect x="278" y="197" width="56" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="288" cy="205" r="10" fill="#0EA5E9" />
-            <text x="288" y="207.5" textAnchor="middle" className="text-[7px] font-bold fill-white">Pr</text>
+            <text x="288" y="207.5" textAnchor="middle" className="text-[7px] font-bold fill-white">P2</text>
             <text x="313" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi2Val} atm</text>
 
-            {/* Termostar Tr (Kanan) — 2D Pill style */}
-            <text x="375" y="191" textAnchor="middle" className="text-[7.5px] font-black fill-purple-900">
-              Termostar
-            </text>
+            {/* T2 (Termostat Nozzle) — 2D Pill style */}
             <rect x="348" y="197" width="54" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
-            <circle cx="358" cy="205" r="10" fill="#9333EA" />
-            <text x="358" y="207.5" textAnchor="middle" className="text-[7px] font-bold fill-white">Tr</text>
-            <text x="381" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tho}°C</text>
+            <circle cx="358" cy="205" r="10" fill="#0284C7" />
+            <text x="358" y="207.5" textAnchor="middle" className="text-[7px] font-bold fill-white">T2</text>
+            <text x="381" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tco}°C</text>
           </g>
 
           {/* ═══════════════════════════════════════════════════════════════════════════
@@ -911,7 +787,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="810" y="239" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="830" cy="247" r="10" fill="#EF4444" />
             <text x="830" y="249.5" textAnchor="middle" className="text-[7px] font-bold fill-white">T4</text>
-            <text x="830" y="233" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tco}°C</text>
+            <text x="830" y="233" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{Number(latestData.ti4 || 0).toFixed(1)}°C</text>
           </g>
 
           {/* VL Kanan — Katup VL di titik x=860 sesuai Gambar 1 */}
@@ -1020,75 +896,115 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
         </svg>
       </div>
 
-      {/* ─── 4 SENSOR MATRIX & THERMAL KPIS (RINGKAS & RAPI) ─── */}
+      {/* ─── KETERANGAN SINGKATAN SENSOR & KOMPONEN (ON-DEMAND TOGGLE) ─── */}
       <div className="space-y-2">
-        <div className="p-2.5 sm:p-3 bg-white rounded-xl sm:rounded-2xl border border-slate-200/90 grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs shadow-2xs">
-          {/* T1 & P1 */}
-          <div className="p-2 rounded-lg bg-orange-50/70 border border-orange-200/70 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-orange-600 text-white font-black text-[9px] flex items-center justify-center">T1</span>
-              <div>
-                <span className="text-[9px] font-bold text-slate-500 block">Left Inlet</span>
-                <strong className="text-orange-700 font-black text-xs sm:text-sm">{thi} °C</strong>
-              </div>
-            </div>
-            <span className="text-[8.5px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-orange-200">
-              P1: {pi1Val} atm
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50/90 hover:bg-slate-100/90 rounded-xl border border-slate-200/90 transition shadow-2xs">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+            <Info className="w-4 h-4 text-sky-600 shrink-0" />
+            <span>Keterangan Singkatan Notasi:</span>
+            <span className="hidden sm:inline-flex text-[11px] font-medium text-slate-500">
+              (T1–T4, P1–P4, FC1–FC2, VL, SV, H)
             </span>
           </div>
-
-          {/* Tr & Pr */}
-          <div className="p-2 rounded-lg bg-rose-50/70 border border-rose-200/70 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-rose-600 text-white font-black text-[9px] flex items-center justify-center">Tr</span>
-              <div>
-                <span className="text-[9px] font-bold text-slate-500 block">Cold Outlet</span>
-                <strong className="text-rose-700 font-black text-xs sm:text-sm">{tho} °C</strong>
-              </div>
-            </div>
-            <span className="text-[8.5px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-rose-200">
-              Pr: {pi2Val} atm
-            </span>
-          </div>
-
-          {/* T3 & P3 */}
-          <div className="p-2 rounded-lg bg-cyan-50/70 border border-cyan-200/70 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-cyan-600 text-white font-black text-[9px] flex items-center justify-center">T3</span>
-              <div>
-                <span className="text-[9px] font-bold text-slate-500 block">Cold Inlet</span>
-                <strong className="text-cyan-700 font-black text-xs sm:text-sm">{tci} °C</strong>
-              </div>
-            </div>
-            <span className="text-[8.5px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-cyan-200">
-              P3: {pi3Val} atm
-            </span>
-          </div>
-
-          {/* T4 & P4 */}
-          <div className="p-2 rounded-lg bg-sky-50/70 border border-sky-200/70 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded bg-sky-600 text-white font-black text-[9px] flex items-center justify-center">T4</span>
-              <div>
-                <span className="text-[9px] font-bold text-slate-500 block">Right Header</span>
-                <strong className="text-sky-700 font-black text-xs sm:text-sm">{tco} °C</strong>
-              </div>
-            </div>
-            <span className="text-[8.5px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-sky-200">
-              P4: {pi4Val} atm
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowLegend((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white hover:bg-sky-50 text-sky-700 border border-slate-200 text-xs font-bold shadow-2xs transition cursor-pointer"
+          >
+            <span>{showLegend ? 'Tutup Keterangan' : 'Buka Keterangan'}</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showLegend ? 'rotate-180 text-sky-600' : 'text-slate-500'}`} />
+          </button>
         </div>
 
-        {/* Row 2: Performance KPIs */}
-        <div className="p-2.5 bg-white rounded-xl border border-slate-200/90 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs shadow-xs">
+        {showLegend && (
+          <div className="p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs animate-in fade-in duration-200">
+            {/* T1 - T4 */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50/70 hover:bg-orange-50/40 rounded-xl border border-slate-200/80 transition">
+              <span className="px-2.5 py-1 rounded-lg bg-orange-500 text-white font-black text-[11px] shrink-0 whitespace-nowrap shadow-2xs">
+                T1 – T4
+              </span>
+              <div className="min-w-0">
+                <strong className="text-slate-800 block text-xs font-bold">Termostat (Suhu)</strong>
+                <span className="text-[11px] text-slate-500 block">Sensor Suhu Fluida (T1, T2, T3, T4)</span>
+              </div>
+            </div>
+
+            {/* P1 - P4 */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50/70 hover:bg-blue-50/40 rounded-xl border border-slate-200/80 transition">
+              <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-black text-[11px] shrink-0 whitespace-nowrap shadow-2xs">
+                P1 – P4
+              </span>
+              <div className="min-w-0">
+                <strong className="text-slate-800 block text-xs font-bold">Pressure (Tekanan)</strong>
+                <span className="text-[11px] text-slate-500 block">Sensor Tekanan Fluida (P1, P2, P3, P4)</span>
+              </div>
+            </div>
+
+            {/* FC1 - FC2 */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50/70 hover:bg-emerald-50/40 rounded-xl border border-slate-200/80 transition">
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-black text-[11px] shrink-0 whitespace-nowrap shadow-2xs">
+                FC1 – FC2
+              </span>
+              <div className="min-w-0">
+                <strong className="text-slate-800 block text-xs font-bold">Flow Controller</strong>
+                <span className="text-[11px] text-slate-500 block">Sensor Debit Aliran (FC1 &amp; FC2)</span>
+              </div>
+            </div>
+
+            {/* VL1 - VL6 */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50/70 hover:bg-amber-50/40 rounded-xl border border-slate-200/80 transition">
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-white font-black text-[11px] shrink-0 whitespace-nowrap shadow-2xs">
+                VL1 – VL6
+              </span>
+              <div className="min-w-0">
+                <strong className="text-slate-800 block text-xs font-bold">Valve Manual</strong>
+                <span className="text-[11px] text-slate-500 block">Katup Kran Aliran Manual (VL1 s/d VL6)</span>
+              </div>
+            </div>
+
+            {/* SV1 - SV4 */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50/70 hover:bg-purple-50/40 rounded-xl border border-slate-200/80 transition">
+              <span className="px-2.5 py-1 rounded-lg bg-purple-600 text-white font-black text-[11px] shrink-0 whitespace-nowrap shadow-2xs">
+                SV1 – SV4
+              </span>
+              <div className="min-w-0">
+                <strong className="text-slate-800 block text-xs font-bold">Solenoid Valve</strong>
+                <span className="text-[11px] text-slate-500 block">Katup Otomatis Elektrik (SV1 s/d SV4)</span>
+              </div>
+            </div>
+
+            {/* H1 - H2 */}
+            <div className="flex items-center gap-3 p-2.5 bg-slate-50/70 hover:bg-rose-50/40 rounded-xl border border-slate-200/80 transition">
+              <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-black text-[11px] shrink-0 whitespace-nowrap shadow-2xs">
+                H1 – H2
+              </span>
+              <div className="min-w-0">
+                <strong className="text-slate-800 block text-xs font-bold">Dual Heater</strong>
+                <span className="text-[11px] text-slate-500 block">Elemen Pemanas Tangki Air Panas</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── THERMAL PERFORMANCE KPIS (LMTD & ΔT) ─── */}
+      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 px-0.5">
+          <span className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-sky-600" />
+            Kinerja Perpindahan Kalor & LMTD
+          </span>
+          <span className="text-[9.5px] font-bold text-slate-400">Parameter Efisiensi Termal</span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-0.5">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-orange-200 shrink-0">
+            <div className="p-1.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 shrink-0">
               <Flame className="w-3.5 h-3.5" />
             </div>
             <div>
-              <span className="text-[9.5px] font-bold text-slate-500 block">ΔT Hot:</span>
-              <strong className="text-amber-700 font-black text-xs sm:text-sm">
+              <span className="text-[9.5px] font-bold text-slate-500 block">ΔT Hot (Pelepasan):</span>
+              <strong className="text-slate-800 font-black text-xs sm:text-sm">
                 {(thi - tho).toFixed(1)} °C
               </strong>
             </div>
@@ -1099,7 +1015,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
               <Droplets className="w-3.5 h-3.5" />
             </div>
             <div>
-              <span className="text-[9.5px] font-bold text-slate-500 block">ΔT Cold:</span>
+              <span className="text-[9.5px] font-bold text-slate-500 block">ΔT Cold (Penyerapan):</span>
               <strong className="text-sky-700 font-black text-xs sm:text-sm">
                 {Math.abs(tco - tci).toFixed(1)} °C
               </strong>
@@ -1123,15 +1039,15 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
               <Activity className="w-3.5 h-3.5" />
             </div>
             <div>
-              <span className="text-[9.5px] font-bold text-slate-500 block">Status:</span>
-              <span className="inline-block font-black text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+              <span className="text-[9.5px] font-bold text-slate-500 block">Status Operasi:</span>
+              <span className="inline-block font-black text-[9.5px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                 Rig Active
               </span>
             </div>
           </div>
         </div>
       </div>
-    </div>
+      </div>
   );
 };
 

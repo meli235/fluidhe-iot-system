@@ -7,6 +7,7 @@ import {
 import {
   TelemetryRow,
   DeviceControlsRow,
+  ControlMode,
   SupabaseConnectionStatus
 } from '@/types';
 import {
@@ -31,10 +32,15 @@ export function useSupabaseIntegration() {
     flow_mode: 'COUNTER',
     control_mode: 'MANUAL',
     heater_status: false,
-    servo_angle: 52,
+    servo_angle: 100,
+    servo_angle_2: 100,
     target_temp: 62.5,
-    uap_status: true,
-    air_dingin: false,
+    target_upper: 60,
+    target_lower: 45,
+    uap_status: false,
+    uap_interval_min: 5,
+    air_dingin: true,
+    pompa_ekstra: true,
     target_flow: 2.0,
     btn_up: false,
     btn_onoff: false,
@@ -95,9 +101,17 @@ export function useSupabaseIntegration() {
           if (savedInt > 0) storedInterval = savedInt;
         } catch (e) {}
 
+        const h1 = controlsData.btn_onoff !== undefined
+          ? Boolean(controlsData.btn_onoff)
+          : (controlsData.heater_1_status !== undefined ? Boolean(controlsData.heater_1_status) : Boolean(controlsData.heater_status));
+        const h2 = controlsData.heater_2_status !== undefined ? Boolean(controlsData.heater_2_status) : false;
+
         setDeviceControls((prev) => ({
           ...prev,
           ...controlsData,
+          heater_1_status: h1,
+          heater_2_status: h2,
+          heater_status: h1 || h2,
           uap_auto_status: controlsData.uap_auto_status ?? (prev.uap_auto_status ?? storedAuto),
           uap_interval_min: controlsData.uap_interval_min ?? (prev.uap_interval_min ?? storedInterval),
         }));
@@ -143,18 +157,38 @@ export function useSupabaseIntegration() {
 
       fetchDeviceControls().then(({ data, error }) => {
         if (!error && data) {
-          const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 10000);
+          const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 6000);
           setDeviceControls((prev) => {
-            const controlModeToKeep = isRecentlyUpdatedByUser ? prev.control_mode : (data.control_mode || prev.control_mode);
-            const flowModeToKeep = isRecentlyUpdatedByUser ? prev.flow_mode : (data.flow_mode || prev.flow_mode);
+            if (isRecentlyUpdatedByUser) {
+              return {
+                ...prev,
+                ...data,
+                control_mode: prev.control_mode,
+                flow_mode: prev.flow_mode,
+                heater_status: prev.heater_status,
+                heater_1_status: prev.heater_1_status,
+                heater_2_status: prev.heater_2_status,
+                target_temp: prev.target_temp,
+                servo_angle: prev.servo_angle,
+                servo_angle_2: prev.servo_angle_2,
+                air_dingin: prev.air_dingin,
+                uap_status: prev.uap_status,
+                uap_auto_status: prev.uap_auto_status ?? false,
+                uap_interval_min: prev.uap_interval_min ?? 10,
+              };
+            }
+
+            const h1 = data.btn_onoff !== undefined
+              ? Boolean(data.btn_onoff)
+              : (data.heater_1_status !== undefined ? Boolean(data.heater_1_status) : Boolean(data.heater_status));
+            const h2 = data.heater_2_status !== undefined ? Boolean(data.heater_2_status) : false;
 
             return {
               ...prev,
               ...data,
-              control_mode: controlModeToKeep,
-              flow_mode: flowModeToKeep,
-              heater_1_status: isRecentlyUpdatedByUser ? prev.heater_1_status : (data.heater_1_status !== undefined ? data.heater_1_status : Boolean(data.heater_status)),
-              heater_2_status: isRecentlyUpdatedByUser ? prev.heater_2_status : (data.heater_2_status !== undefined ? data.heater_2_status : false),
+              heater_1_status: h1,
+              heater_2_status: h2,
+              heater_status: h1 || h2,
               uap_auto_status: prev.uap_auto_status ?? false,
               uap_interval_min: prev.uap_interval_min ?? 10,
             };
@@ -205,19 +239,37 @@ export function useSupabaseIntegration() {
         { event: 'UPDATE', schema: 'public', table: 'device_controls' },
         (payload) => {
           const updatedControls = payload.new as DeviceControlsRow;
-          const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 10000);
+          const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 4000);
           if (updatedControls && updatedControls.id === 1) {
             setDeviceControls((prev) => {
-              const controlModeToKeep = isRecentlyUpdatedByUser ? prev.control_mode : (updatedControls.control_mode || prev.control_mode);
-              const flowModeToKeep = isRecentlyUpdatedByUser ? prev.flow_mode : (updatedControls.flow_mode || prev.flow_mode);
+              if (isRecentlyUpdatedByUser) {
+                return {
+                  ...prev,
+                  ...updatedControls,
+                  control_mode: prev.control_mode,
+                  flow_mode: prev.flow_mode,
+                  heater_status: prev.heater_status,
+                  heater_1_status: prev.heater_1_status,
+                  heater_2_status: prev.heater_2_status,
+                  target_temp: prev.target_temp,
+                  servo_angle: prev.servo_angle,
+                  servo_angle_2: prev.servo_angle_2,
+                  air_dingin: prev.air_dingin,
+                  uap_status: prev.uap_status,
+                };
+              }
+
+              const h1 = updatedControls.btn_onoff !== undefined
+                ? Boolean(updatedControls.btn_onoff)
+                : (updatedControls.heater_1_status !== undefined ? Boolean(updatedControls.heater_1_status) : Boolean(updatedControls.heater_status));
+              const h2 = updatedControls.heater_2_status !== undefined ? Boolean(updatedControls.heater_2_status) : false;
 
               return {
                 ...prev,
                 ...updatedControls,
-                control_mode: controlModeToKeep,
-                flow_mode: flowModeToKeep,
-                heater_1_status: isRecentlyUpdatedByUser ? prev.heater_1_status : (updatedControls.heater_1_status !== undefined ? updatedControls.heater_1_status : Boolean(updatedControls.heater_status)),
-                heater_2_status: isRecentlyUpdatedByUser ? prev.heater_2_status : (updatedControls.heater_2_status !== undefined ? updatedControls.heater_2_status : false),
+                heater_1_status: h1,
+                heater_2_status: h2,
+                heater_status: h1 || h2,
                 uap_auto_status: prev.uap_auto_status ?? false,
                 uap_interval_min: prev.uap_interval_min ?? 10,
               };
@@ -264,7 +316,7 @@ export function useSupabaseIntegration() {
     return result;
   };
 
-  const handleControlModeChange = async (controlMode: 'AUTO' | 'MANUAL') => {
+  const handleControlModeChange = async (controlMode: ControlMode) => {
     lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({
@@ -292,15 +344,15 @@ export function useSupabaseIntegration() {
   };
 
   const handleHeater1PowerToggle = async (status: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => {
       const h2 = prev.heater_2_status ?? false;
-      const masterOn = status || h2;
       return {
         ...prev,
-        heater_status: masterOn,
         heater_1_status: status,
-        btn_onoff: masterOn,
+        btn_onoff: status,
+        heater_status: status || h2,
       };
     });
     const result = await supabaseControlService.setHeater1Power(status);
@@ -309,20 +361,20 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update heater_1_status: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleHeater2PowerToggle = async (status: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => {
       const h1 = prev.heater_1_status ?? false;
-      const masterOn = h1 || status;
       return {
         ...prev,
-        heater_status: masterOn,
         heater_2_status: status,
-        btn_onoff: masterOn,
+        heater_status: h1 || status,
       };
     });
     const result = await supabaseControlService.setHeater2Power(status);
@@ -331,11 +383,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update heater_2_status: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleHeaterPowerToggle = async (heaterStatus: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({
       ...prev,
@@ -350,11 +404,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update heater_status: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleTargetTempChange = async (targetTemp: number) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, target_temp: targetTemp }));
     const result = await supabaseControlService.setTargetTemp(targetTemp);
@@ -363,11 +419,28 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update target_temp: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+    }
+    return result;
+  };
+
+  const handleThermostatLimitsChange = async (targetUpper: number, targetLower: number) => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    setDeviceControls((prev) => ({ ...prev, target_upper: targetUpper, target_lower: targetLower }));
+    const result = await supabaseControlService.setThermostatLimits(targetUpper, targetLower);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal update Thermostat Limits: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleServoAngleChange = async (servoAngle: number) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, servo_angle: servoAngle }));
     const result = await supabaseControlService.setServoAngle(servoAngle);
@@ -376,11 +449,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update servo_angle: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleValve1Change = async (percent: number) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     const clamped = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
     setDeviceControls((prev) => ({ ...prev, servo_angle: clamped }));
@@ -390,11 +465,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update Katup Panas: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleValve2Change = async (percent: number) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     const clamped = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
     setDeviceControls((prev) => ({ ...prev, servo_angle_2: clamped }));
@@ -404,11 +481,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update Katup Dingin: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleTargetFlowChange = async (targetFlow: number) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, target_flow: targetFlow }));
     const result = await supabaseControlService.setTargetFlow(targetFlow);
@@ -417,11 +496,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update target_flow: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleUapStatusToggle = async (uapStatus: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, uap_status: uapStatus }));
     const result = await supabaseControlService.setUapStatus(uapStatus);
@@ -430,11 +511,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update uap_status: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleUapAutoToggle = async (uapAutoStatus: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     try {
       localStorage.setItem('he_uap_auto_status', String(uapAutoStatus));
@@ -446,6 +529,7 @@ export function useSupabaseIntegration() {
   };
 
   const handleUapIntervalChange = async (intervalMin: number) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     try {
       localStorage.setItem('he_uap_interval_min', String(intervalMin));
@@ -457,6 +541,7 @@ export function useSupabaseIntegration() {
   };
 
   const handleAirDinginToggle = async (airDinginStatus: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setDeviceControls((prev) => ({ ...prev, air_dingin: airDinginStatus }));
     const result = await supabaseControlService.setAirDinginStatus(airDinginStatus);
@@ -465,11 +550,28 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal update air_dingin: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+    }
+    return result;
+  };
+
+  const handlePompaToggle = async (pompaStatus: boolean) => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    setDeviceControls((prev) => ({ ...prev, pompa_ekstra: pompaStatus }));
+    const result = await supabaseControlService.setPompaStatus(pompaStatus);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal update pompa: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleStepButtonPress = async (btnName: 'btn_up' | 'btn_down') => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     const countKey = btnName === 'btn_up' ? 'step_up_count' : 'step_down_count';
     const currentCount = deviceControls[countKey] ?? 0;
@@ -492,11 +594,13 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal memicu tombol ${btnName}: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
     return result;
   };
 
   const handleMomentaryButtonPress = async (btnName: 'btn_up' | 'btn_onoff' | 'btn_down') => {
+    lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
     setActiveMomentaryButtons((prev) => ({ ...prev, [btnName]: true }));
     setDeviceControls((prev) => ({ ...prev, [btnName]: true }));
@@ -511,7 +615,92 @@ export function useSupabaseIntegration() {
       setErrorMessage(`Gagal memicu tombol servo ${btnName}: ${result.error}`);
     } else {
       setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
     }
+    return result;
+  };
+
+  // Sistem On / Off Terintegrasi Sinkron dengan Firmware ESP32
+  const handleSystemStart = async (mode: ControlMode = 'AUTO') => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    setDeviceControls((prev) => ({
+      ...prev,
+      control_mode: mode === 'KALIBRASI' ? 'AUTO' : mode,
+      btn_onoff: true,
+      heater_1_status: true,
+      heater_2_status: true,
+      heater_status: true,
+      air_dingin: true,
+      pompa_ekstra: true,
+      flow_mode: 'COUNTER',
+      servo_angle: 100,
+      servo_angle_2: 100,
+    }));
+    const result = await supabaseControlService.startSystem(mode);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal menyalakan sistem: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+    }
+    return result;
+  };
+
+  const handleSystemShutdown = async () => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    setDeviceControls((prev) => ({
+      ...prev,
+      control_mode: 'SHUTDOWN',
+      btn_onoff: false,
+      heater_1_status: false,
+      heater_2_status: false,
+      heater_status: false,
+      air_dingin: false,
+      pompa_ekstra: false,
+      uap_status: false,
+      servo_angle: 0,
+      servo_angle_2: 0,
+    }));
+    const result = await supabaseControlService.shutdownSystem();
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal mematikan sistem: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+    }
+    return result;
+  };
+
+  const handleEmergencyShutdown = async () => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    setDeviceControls((prev) => ({
+      ...prev,
+      control_mode: 'STANDBY',
+      btn_onoff: false,
+      heater_1_status: false,
+      heater_2_status: false,
+      heater_status: false,
+      air_dingin: false,
+      pompa_ekstra: false,
+      uap_status: false,
+      servo_angle: 0,
+      servo_angle_2: 0,
+    }));
+    const result = await supabaseControlService.emergencyShutdown();
+    setIsUpdatingControl(false);
+    return result;
+  };
+
+  const handleTriggerPowerPush = async () => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    const result = await supabaseControlService.triggerPowerPush();
+    setIsUpdatingControl(false);
     return result;
   };
 
@@ -534,6 +723,7 @@ export function useSupabaseIntegration() {
     handleHeater1PowerToggle,
     handleHeater2PowerToggle,
     handleTargetTempChange,
+    handleThermostatLimitsChange,
     handleServoAngleChange,
     handleValve1Change,
     handleValve2Change,
@@ -542,7 +732,12 @@ export function useSupabaseIntegration() {
     handleUapAutoToggle,
     handleUapIntervalChange,
     handleAirDinginToggle,
+    handlePompaToggle,
     handleStepButtonPress,
-    handleMomentaryButtonPress
+    handleMomentaryButtonPress,
+    handleSystemStart,
+    handleSystemShutdown,
+    handleEmergencyShutdown,
+    handleTriggerPowerPush
   };
 }

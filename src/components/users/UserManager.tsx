@@ -94,11 +94,11 @@ export const UserManager: React.FC<UserManagerProps> = ({
   const [editError, setEditError] = React.useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = React.useState<boolean>(false);
   return (
-    <div className="space-y-6">
+    <div id="tour-user-manager" className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Users className="w-5 h-5 text-sky-600" /> User Management & Hak Akses (Admin & Operator)
+            <Users className="w-5 h-5 text-sky-600" /> User Management & Hak Akses
           </h2>
           <p className="text-xs text-slate-500">Kelola akun Admin (Dosen/KaLab) dan Operator (Mahasiswa)</p>
         </div>
@@ -134,9 +134,9 @@ export const UserManager: React.FC<UserManagerProps> = ({
             className="px-3 py-1.5 bg-white border border-sky-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer shadow-xs"
           >
             <option value={15}>15 Menit</option>
-            <option value={30}>30 Menit (Default)</option>
-            <option value={60}>60 Menit (1 Jam)</option>
-            <option value={120}>120 Menit (2 Jam)</option>
+            <option value={30}>30 Menit</option>
+            <option value={60}>60 Menit</option>
+            <option value={120}>120 Menit</option>
           </select>
         </div>
       </div>
@@ -201,48 +201,48 @@ export const UserManager: React.FC<UserManagerProps> = ({
                     )}
                   </td>
                   <td className="p-3 text-slate-500">{formatLastLogin(u.lastLogin)}</td>
-                <td className="p-3 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    {u.role !== 'operator' ? (
+                  <td className="p-3 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {u.role !== 'operator' ? (
+                        <button
+                          onClick={() => onOpenResetPasswordModal(u.email)}
+                          className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
+                          title="Reset / Ganti Kata Sandi (Verifikasi OTP)"
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <div className="w-7 h-7 shrink-0 pointer-events-none" />
+                      )}
                       <button
-                        onClick={() => onOpenResetPasswordModal(u.email)}
+                        onClick={() => {
+                          const today = new Date().toISOString().slice(0, 10);
+                          setUserToEdit(u);
+                          setEditName(u.name);
+                          setEditRole(u.role);
+                          setEditRestricted(u.isScheduleRestricted ?? (u.role === 'operator'));
+                          setEditStartDate(u.allowedStartDate || today);
+                          setEditEndDate(u.allowedEndDate || today);
+                          setEditStartTime(u.allowedStartTime || '07:00');
+                          setEditEndTime(u.allowedEndTime || '18:00');
+                        }}
                         className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
-                        title="Reset / Ganti Kata Sandi (Verifikasi OTP)"
+                        title="Edit Pengguna & Jadwal Akses"
                       >
-                        <Key className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                    ) : (
-                      <div className="w-7 h-7 shrink-0 pointer-events-none" />
-                    )}
-                    <button
-                      onClick={() => {
-                        const today = new Date().toISOString().slice(0, 10);
-                        setUserToEdit(u);
-                        setEditName(u.name);
-                        setEditRole(u.role);
-                        setEditRestricted(u.isScheduleRestricted ?? (u.role === 'operator'));
-                        setEditStartDate(u.allowedStartDate || today);
-                        setEditEndDate(u.allowedEndDate || today);
-                        setEditStartTime(u.allowedStartTime || '07:00');
-                        setEditEndTime(u.allowedEndTime || '18:00');
-                      }}
-                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-sky-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
-                      title="Edit Pengguna & Jadwal Akses"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setUserToDelete(u)}
-                      className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
-                      title="Hapus User"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
+                      <button
+                        onClick={() => setUserToDelete(u)}
+                        className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
+                        title="Hapus User"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -392,7 +392,7 @@ export const UserManager: React.FC<UserManagerProps> = ({
                       required
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
-                      placeholder="user@email.com"
+                      placeholder="user@gmail.com"
                       className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-800"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -501,15 +501,15 @@ export const UserManager: React.FC<UserManagerProps> = ({
                       usersList.map((x) =>
                         x.id === userToEdit.id
                           ? {
-                              ...x,
-                              name: editName.trim(),
-                              role: editRole,
-                              isScheduleRestricted: editRole === 'operator' ? editRestricted : false,
-                              allowedStartDate: editStartDate,
-                              allowedEndDate: editEndDate,
-                              allowedStartTime: editStartTime,
-                              allowedEndTime: editEndTime
-                            }
+                            ...x,
+                            name: editName.trim(),
+                            role: editRole,
+                            isScheduleRestricted: editRole === 'operator' ? editRestricted : false,
+                            allowedStartDate: editStartDate,
+                            allowedEndDate: editEndDate,
+                            allowedStartTime: editStartTime,
+                            allowedEndTime: editEndTime
+                          }
                           : x
                       )
                     );

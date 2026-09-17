@@ -60,7 +60,7 @@ function formatSecondsToTime(totalSeconds: number, includeSeconds = false): stri
 /**
  * Calculates a smooth Cubic Bezier path through discrete points (Catmull-Rom spline conversion)
  */
-function getSmoothPath(points: { x: number; y: number }[]): string {
+function getSmoothPath(points: { x: number; y: number }[], minX?: number, maxX?: number): string {
   if (points.length === 0) return '';
   if (points.length === 1) return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
 
@@ -71,10 +71,19 @@ function getSmoothPath(points: { x: number; y: number }[]): string {
     const p2 = points[i + 1];
     const p3 = points[Math.min(points.length - 1, i + 2)];
 
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    let cp1x = p1.x + (p2.x - p0.x) / 6;
+    let cp1y = p1.y + (p2.y - p0.y) / 6;
+    let cp2x = p2.x - (p3.x - p1.x) / 6;
+    let cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    if (minX !== undefined) {
+      cp1x = Math.max(minX, cp1x);
+      cp2x = Math.max(minX, cp2x);
+    }
+    if (maxX !== undefined) {
+      cp1x = Math.min(maxX, cp1x);
+      cp2x = Math.min(maxX, cp2x);
+    }
 
     d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
   }
@@ -84,9 +93,9 @@ function getSmoothPath(points: { x: number; y: number }[]): string {
 /**
  * Generates an area polygon path from smooth curve down to baseline Y
  */
-function getAreaPath(points: { x: number; y: number }[], baselineY: number): string {
+function getAreaPath(points: { x: number; y: number }[], baselineY: number, minX?: number, maxX?: number): string {
   if (points.length < 2) return '';
-  const linePath = getSmoothPath(points);
+  const linePath = getSmoothPath(points, minX, maxX);
   const firstX = points[0].x.toFixed(1);
   const lastX = points[points.length - 1].x.toFixed(1);
   return `${linePath} L ${lastX},${baselineY} L ${firstX},${baselineY} Z`;
@@ -114,10 +123,41 @@ export const LiveChart: React.FC<LiveChartProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Sort raw history chronologically to prevent backward jumps
+  // Sort raw history chronologically to prevent backward jumps & filter out yesterday's stale records
   const sortedHistory = useMemo(() => {
     if (!telemetryHistory || telemetryHistory.length === 0) return [];
-    return [...telemetryHistory].sort((a, b) => {
+
+    // Extract valid timestamp dates to isolate today's / latest active session
+    const withDates = telemetryHistory.map((pt) => {
+      let timeMs: number | null = null;
+      if (pt.created_at) {
+        const d = new Date(pt.created_at);
+        if (!isNaN(d.getTime())) timeMs = d.getTime();
+      }
+      return { pt, timeMs };
+    });
+
+    const validMs = withDates.filter((x) => x.timeMs !== null).map((x) => x.timeMs as number);
+    let filteredList = telemetryHistory;
+
+    if (validMs.length > 0) {
+      const maxMs = Math.max(...validMs);
+      const latestDateStr = new Date(maxMs).toDateString();
+      // Keep only points from the same date or recorded within recent 8 hours
+      filteredList = withDates
+        .filter(({ pt, timeMs }) => {
+          if (!timeMs) return true;
+          const ptDateStr = new Date(timeMs).toDateString();
+          return ptDateStr === latestDateStr && (maxMs - timeMs <= 8 * 3600 * 1000);
+        })
+        .map(({ pt }) => pt);
+    }
+
+    return [...filteredList].sort((a, b) => {
+      if (a.created_at && b.created_at) {
+        const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        if (!isNaN(diff)) return diff;
+      }
       const secA = parseTimeToSeconds(a.timestamp) ?? 0;
       const secB = parseTimeToSeconds(b.timestamp) ?? 0;
       return secA - secB;
@@ -213,20 +253,27 @@ export const LiveChart: React.FC<LiveChartProps> = ({
       })
       .filter((d): d is typeof d & { sec: number } => d.sec !== null);
 
-    const mapped = pointsWithTime.map((d) => {
-      let relSec = d.sec - startSec;
-      if (relSec < -43200) relSec += 86400; // Handle midnight wrap
-      if (relSec > 43200) relSec -= 86400;
+    const mapped = pointsWithTime
+      .filter((d) => {
+        let relSec = d.sec - startSec;
+        if (relSec < -43200) relSec += 86400; // Handle midnight wrap
+        if (relSec > 43200) relSec -= 86400;
+        return relSec >= 0 && relSec <= durationSec;
+      })
+      .map((d) => {
+        let relSec = d.sec - startSec;
+        if (relSec < -43200) relSec += 86400;
+        if (relSec > 43200) relSec -= 86400;
 
-      const ratio = Math.max(0, Math.min(1, relSec / durationSec));
-      const plotX = padLeft + ratio * plotWidth;
-      return {
-        ...d,
-        plotX,
-        relSec,
-        isInsideWindow: relSec >= 0 && relSec <= durationSec
-      };
-    });
+        const ratio = Math.max(0, Math.min(1, relSec / durationSec));
+        const plotX = padLeft + ratio * plotWidth;
+        return {
+          ...d,
+          plotX,
+          relSec,
+          isInsideWindow: true
+        };
+      });
 
     // Generate 7 evenly spaced time tick marks across the duration (e.g. 10:00, 10:10, 10:20... 11:00)
     const numTicks = 6;
@@ -261,13 +308,16 @@ export const LiveChart: React.FC<LiveChartProps> = ({
     [filteredPoints]
   );
 
-  const ti1Path = useMemo(() => getSmoothPath(ti1Points), [ti1Points]);
-  const ti2Path = useMemo(() => getSmoothPath(ti2Points), [ti2Points]);
-  const ti3Path = useMemo(() => getSmoothPath(ti3Points), [ti3Points]);
-  const ti4Path = useMemo(() => getSmoothPath(ti4Points), [ti4Points]);
+  const minPlotX = padLeft;
+  const maxPlotX = width - padRight;
 
-  const ti1Area = useMemo(() => getAreaPath(ti1Points, baselineY), [ti1Points, baselineY]);
-  const ti4Area = useMemo(() => getAreaPath(ti4Points, baselineY), [ti4Points, baselineY]);
+  const ti1Path = useMemo(() => getSmoothPath(ti1Points, minPlotX, maxPlotX), [ti1Points, minPlotX, maxPlotX]);
+  const ti2Path = useMemo(() => getSmoothPath(ti2Points, minPlotX, maxPlotX), [ti2Points, minPlotX, maxPlotX]);
+  const ti3Path = useMemo(() => getSmoothPath(ti3Points, minPlotX, maxPlotX), [ti3Points, minPlotX, maxPlotX]);
+  const ti4Path = useMemo(() => getSmoothPath(ti4Points, minPlotX, maxPlotX), [ti4Points, minPlotX, maxPlotX]);
+
+  const ti1Area = useMemo(() => getAreaPath(ti1Points, baselineY, minPlotX, maxPlotX), [ti1Points, baselineY, minPlotX, maxPlotX]);
+  const ti4Area = useMemo(() => getAreaPath(ti4Points, baselineY, minPlotX, maxPlotX), [ti4Points, baselineY, minPlotX, maxPlotX]);
 
   const hoveredPoint = hoverIndex !== null && hoverIndex >= 0 && hoverIndex < filteredPoints.length ? filteredPoints[hoverIndex] : null;
 
@@ -288,7 +338,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
   }, [currentTimeSec, timeWindow, durationMode, padLeft, plotWidth]);
 
   return (
-    <div className="asklepios-card p-3.5 sm:p-6 bg-white shadow-sm border border-slate-200/80 rounded-2xl sm:rounded-3xl space-y-3 sm:space-y-4">
+    <div id="tour-live-chart" className="asklepios-card p-3.5 sm:p-6 bg-white shadow-sm border border-slate-200/80 rounded-2xl sm:rounded-3xl space-y-3 sm:space-y-4">
       {/* Header with Title, Session Duration Controls & Time Scale Selector */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3.5 pb-2 border-b border-slate-100">
         <div>
@@ -462,6 +512,11 @@ export const LiveChart: React.FC<LiveChartProps> = ({
           }}
         >
           <defs>
+            {/* Strict plot clip to completely eliminate any offside line overshooting into axis labels */}
+            <clipPath id="chartPlotClip">
+              <rect x={padLeft} y={0} width={width - padRight - padLeft} height={height} />
+            </clipPath>
+
             <linearGradient id="grad_airy_blue_area" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.22" />
               <stop offset="60%" stopColor="#60A5FA" stopOpacity="0.06" />
@@ -513,6 +568,16 @@ export const LiveChart: React.FC<LiveChartProps> = ({
             );
           })}
 
+          {/* Vertical Separator Line between Y-Axis Labels and Plot Area */}
+          <line
+            x1={padLeft}
+            y1={padTop}
+            x2={padLeft}
+            y2={baselineY}
+            stroke="#CBD5E1"
+            strokeWidth="1.5"
+          />
+
           {/* Vertical Grid Ticks for Session Timestamps */}
           {timeTicks.map((tick, idx) => (
             <g key={idx}>
@@ -549,68 +614,70 @@ export const LiveChart: React.FC<LiveChartProps> = ({
             </g>
           )}
 
-          {/* Ambient Wave Gradients */}
-          {(activeChannel === 'all' || activeChannel === 'ti4') && (
-            <path d={ti4Area} fill="url(#grad_airy_blue_area)" className="transition-all duration-500 ease-out" />
-          )}
-          {activeChannel === 'ti1' && (
-            <path d={ti1Area} fill="url(#grad_airy_amber_area)" className="transition-all duration-500 ease-out" />
-          )}
+          {/* ─── CLIPPED PLOT AREA (PREVENTS OFFSIDE / OVERFLOW INTO AXIS LABELS) ─── */}
+          <g clipPath="url(#chartPlotClip)">
+            {/* Ambient Wave Gradients */}
+            {(activeChannel === 'all' || activeChannel === 'ti4') && (
+              <path d={ti4Area} fill="url(#grad_airy_blue_area)" className="transition-all duration-500 ease-out" />
+            )}
+            {activeChannel === 'ti1' && (
+              <path d={ti1Area} fill="url(#grad_airy_amber_area)" className="transition-all duration-500 ease-out" />
+            )}
 
-          {/* Smooth Flowing Spline Curves */}
-          {/* TI3: Cold Inlet */}
-          {(activeChannel === 'all' || activeChannel === 'ti3') && (
-            <path
-              d={ti3Path}
-              fill="none"
-              stroke="#06B6D4"
-              strokeWidth={activeChannel === 'ti3' ? '3.5' : '2'}
-              strokeDasharray="5 3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="transition-all duration-500 ease-out opacity-85"
-            />
-          )}
+            {/* Smooth Flowing Spline Curves */}
+            {/* T3: Cold Inlet */}
+            {(activeChannel === 'all' || activeChannel === 'ti3') && (
+              <path
+                d={ti3Path}
+                fill="none"
+                stroke="#0D9488"
+                strokeWidth={activeChannel === 'ti3' ? '3.5' : '2'}
+                strokeDasharray="5 3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="transition-all duration-500 ease-out opacity-85"
+              />
+            )}
 
-          {/* TI2: Hot Outlet */}
-          {(activeChannel === 'all' || activeChannel === 'ti2') && (
-            <path
-              d={ti2Path}
-              fill="none"
-              stroke="#F43F5E"
-              strokeWidth={activeChannel === 'ti2' ? '3.5' : '2'}
-              strokeDasharray="5 3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="transition-all duration-500 ease-out opacity-85"
-            />
-          )}
+            {/* T2: Cold Outlet */}
+            {(activeChannel === 'all' || activeChannel === 'ti2') && (
+              <path
+                d={ti2Path}
+                fill="none"
+                stroke="#0284C7"
+                strokeWidth={activeChannel === 'ti2' ? '3.5' : '2'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="transition-all duration-500 ease-out opacity-90"
+              />
+            )}
 
-          {/* TI1: Hot Inlet */}
-          {(activeChannel === 'all' || activeChannel === 'ti1') && (
-            <path
-              d={ti1Path}
-              fill="none"
-              stroke="url(#wave_grad_hot_flow)"
-              strokeWidth={activeChannel === 'ti1' ? '4' : '3'}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="transition-all duration-500 ease-out"
-            />
-          )}
+            {/* T1: Hot Stream (Kiri) */}
+            {(activeChannel === 'all' || activeChannel === 'ti1') && (
+              <path
+                d={ti1Path}
+                fill="none"
+                stroke="url(#wave_grad_hot_flow)"
+                strokeWidth={activeChannel === 'ti1' ? '4' : '3'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="transition-all duration-500 ease-out"
+              />
+            )}
 
-          {/* TI4: Cold Outlet (Signature Cyan-Blue Wave) */}
-          {(activeChannel === 'all' || activeChannel === 'ti4') && (
-            <path
-              d={ti4Path}
-              fill="none"
-              stroke="url(#wave_grad_primary_flow)"
-              strokeWidth={activeChannel === 'ti4' ? '4.5' : '3.5'}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="transition-all duration-500 ease-out drop-shadow-sm"
-            />
-          )}
+            {/* T4: Hot Stream (Kanan) */}
+            {(activeChannel === 'all' || activeChannel === 'ti4') && (
+              <path
+                d={ti4Path}
+                fill="none"
+                stroke="#F43F5E"
+                strokeWidth={activeChannel === 'ti4' ? '4' : '3'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="transition-all duration-500 ease-out drop-shadow-sm"
+              />
+            )}
+          </g>
 
           {/* Live Current Time Marker Line in Session */}
           {currentTimeMarkerX !== null && (
@@ -680,10 +747,10 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               )}
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-[11px]">
-              <span className="text-amber-400 font-bold">TI1 (Hot In): {hoveredPoint.ti1.toFixed(1)}°C</span>
-              <span className="text-rose-400 font-bold">TI2 (Hot Out): {hoveredPoint.ti2.toFixed(1)}°C</span>
-              <span className="text-cyan-400 font-bold">TI3 (Cold In): {hoveredPoint.ti3.toFixed(1)}°C</span>
-              <span className="text-sky-400 font-bold">TI4 (Cold Out): {hoveredPoint.ti4.toFixed(1)}°C</span>
+              <span className="text-amber-400 font-bold">T1 (Hot Kiri): {hoveredPoint.ti1.toFixed(1)}°C</span>
+              <span className="text-cyan-400 font-bold">T2 (Cold Out): {hoveredPoint.ti2.toFixed(1)}°C</span>
+              <span className="text-teal-400 font-bold">T3 (Cold In): {hoveredPoint.ti3.toFixed(1)}°C</span>
+              <span className="text-rose-400 font-bold">T4 (Hot Kanan): {hoveredPoint.ti4.toFixed(1)}°C</span>
             </div>
           </div>
         )}
@@ -698,37 +765,37 @@ export const LiveChart: React.FC<LiveChartProps> = ({
             }`}
         >
           <span className="w-3.5 h-1.5 bg-amber-600 rounded-full shadow-xs" />
-          <span className="text-amber-900">TI1 (Hot Inlet)</span>
+          <span className="text-amber-900">T1 (Hot Stream - Kiri)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti2' ? 'all' : 'ti2')}
-          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti2' ? 'bg-rose-50 ring-1 ring-rose-300 font-bold scale-105' : 'hover:bg-slate-50'
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti2' ? 'bg-sky-50 ring-1 ring-sky-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
-          <span className="w-3.5 h-1.5 bg-rose-600 rounded-full border-dashed" />
-          <span className="text-rose-900">TI2 (Hot Outlet - Heater 2)</span>
+          <span className="w-3.5 h-1.5 bg-sky-600 rounded-full shadow-xs" />
+          <span className="text-sky-900">T2 (Cold Outlet - Atas)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti3' ? 'all' : 'ti3')}
-          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti3' ? 'bg-cyan-50 ring-1 ring-cyan-300 font-bold scale-105' : 'hover:bg-slate-50'
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti3' ? 'bg-teal-50 ring-1 ring-teal-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
-          <span className="w-3.5 h-1.5 bg-cyan-600 rounded-full border-dashed" />
-          <span className="text-cyan-900">TI3 (Cold Inlet)</span>
+          <span className="w-3.5 h-1.5 bg-teal-600 rounded-full border-dashed" />
+          <span className="text-teal-900">T3 (Cold Inlet - Suplai)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveChannel(activeChannel === 'ti4' ? 'all' : 'ti4')}
-          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti4' ? 'bg-sky-50 ring-1 ring-sky-300 font-bold scale-105' : 'hover:bg-slate-50'
+          className={`flex items-center gap-2 cursor-pointer transition py-1 px-2.5 rounded-lg ${activeChannel === 'ti4' ? 'bg-rose-50 ring-1 ring-rose-300 font-bold scale-105' : 'hover:bg-slate-50'
             }`}
         >
-          <span className="w-3.5 h-1.5 bg-sky-600 rounded-full shadow-xs" />
-          <span className="text-sky-900">TI4 (Cold Outlet)</span>
+          <span className="w-3.5 h-1.5 bg-rose-600 rounded-full shadow-xs" />
+          <span className="text-rose-900">T4 (Hot Stream - Kanan)</span>
         </button>
 
         {activeChannel !== 'all' && (

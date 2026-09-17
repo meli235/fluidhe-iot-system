@@ -2,9 +2,10 @@
 
 import React from 'react';
 import { Wind, Clock, Power, ShieldAlert } from 'lucide-react';
+import { ControlMode } from '@/types';
 
 interface SteamValveControlProps {
-  controlMode?: 'AUTO' | 'MANUAL';
+  controlMode?: ControlMode;
   uapStatus: boolean;
   uapAutoStatus?: boolean;
   uapIntervalMin?: number;
@@ -29,46 +30,57 @@ export const SteamValveControl: React.FC<SteamValveControlProps> = ({
   const isAuto = controlMode === 'AUTO';
 
   return (
-    <div className="p-2.5 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 space-y-2 sm:space-y-3 flex flex-col justify-between h-full">
+    <div
+      id="tour-steam-valve"
+      className="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between h-full shadow-2xs"
+    >
       {/* Header */}
       <div className="flex justify-between items-center gap-2">
-        <span className="text-[11px] sm:text-xs font-bold text-slate-800 flex items-center gap-1.5 truncate">
-          <Wind className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600 shrink-0" />
-          <span className="truncate">Katup Solenoid Uap</span>
+        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 truncate">
+          <Wind className="w-4 h-4 text-sky-600 shrink-0" />
+          <span className="truncate font-extrabold">Katup Solenoid Uap</span>
         </span>
         <div className="flex items-center gap-1.5 shrink-0">
           {isPressureDangerous && (
-            <span className="text-[9px] sm:text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 animate-pulse flex items-center gap-1">
+            <span className="text-[9.5px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200 animate-pulse flex items-center gap-1">
               <ShieldAlert className="w-3 h-3 text-rose-600" />
               SAFETY OPEN
             </span>
           )}
           <span
-            className={`text-[9px] sm:text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${uapStatus ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-2xs' : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}
+            className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${
+              uapStatus
+                ? 'bg-sky-50 text-sky-700 border-sky-200 shadow-2xs'
+                : 'bg-slate-100 text-slate-600 border-slate-200'
+            }`}
           >
-            {uapStatus ? 'BUKA (OPEN)' : 'TUTUP (CLOSED)'}
+            {uapStatus ? 'BUKA (OPEN)' : 'CLOSED'}
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+      <div className="space-y-3 flex-1 flex flex-col justify-between">
         {/* Kontrol 1: Status & Manual On-Demand */}
-        <div className="p-2.5 sm:p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5 sm:space-y-2 flex flex-col justify-between">
+        <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 flex flex-col justify-between">
           <div className="flex justify-between items-center">
-            <span className="text-[10.5px] sm:text-[11px] font-bold text-slate-700">1. Status & Manual</span>
-            <span className={`w-2 h-2 rounded-full ${uapStatus ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}`} />
+            <span className="text-[11px] font-bold text-slate-700">1. Status & Manual</span>
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                uapStatus ? 'bg-sky-500 animate-pulse ring-2 ring-sky-200' : 'bg-slate-300'
+              }`}
+            />
           </div>
           <button
             type="button"
             onClick={() => onToggleUapManual(!uapStatus)}
             disabled={emergencyStopped || isAuto}
-            className={`w-full py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${isAuto
+            className={`w-full py-2 min-h-[38px] rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs ${
+              isAuto
                 ? 'bg-slate-800 text-white opacity-90 cursor-not-allowed'
                 : uapStatus
-                  ? 'bg-amber-600 text-white hover:bg-amber-700'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-              }`}
+                ? 'bg-slate-900 text-white hover:bg-slate-800 active:scale-98'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 active:scale-98'
+            }`}
           >
             <Power className="w-3.5 h-3.5" />
             {isAuto
@@ -78,13 +90,13 @@ export const SteamValveControl: React.FC<SteamValveControlProps> = ({
         </div>
 
         {/* Kontrol 2: Interval Siklus Auto (Tutup -> Buka Periodik) */}
-        <div className="p-2.5 sm:p-3 bg-white rounded-xl border border-slate-200 space-y-1.5 sm:space-y-2 flex flex-col justify-between">
+        <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 flex flex-col justify-between">
           <div className="flex justify-between items-center">
-            <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+            <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-sky-600" /> 2. Siklus Berjadwal
             </span>
             {isAuto ? (
-              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200">
+              <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200">
                 AKTIF
               </span>
             ) : (
@@ -106,7 +118,7 @@ export const SteamValveControl: React.FC<SteamValveControlProps> = ({
                 onChangeUapInterval(val);
               }}
               disabled={emergencyStopped}
-              className="w-full max-w-[110px] px-2.5 py-1 bg-white border border-slate-300 hover:border-slate-400 rounded-lg font-extrabold text-slate-800 text-[11px] cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors"
+              className="w-full max-w-[120px] px-2.5 py-1 bg-white border border-slate-300 hover:border-slate-400 rounded-lg font-extrabold text-slate-800 text-[11px] cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors"
             >
               <option value={5}>5 Menit</option>
               <option value={10}>10 Menit</option>
@@ -117,8 +129,8 @@ export const SteamValveControl: React.FC<SteamValveControlProps> = ({
         </div>
       </div>
 
-      <p className="text-[9.5px] text-slate-500 font-medium px-0.5">
-        *Mode AUTO: Katup normalnya <strong>tertutup</strong>, lalu <strong>membuka otomatis setiap {uapIntervalMin} menit</strong> untuk membuang uap/tekanan dan menutup kembali.
+      <p className="text-[10px] text-slate-500 font-medium px-0.5">
+        *Mode AUTO: Katup uap membuka periodik setiap {uapIntervalMin} menit untuk regulasi tekanan.
       </p>
     </div>
   );

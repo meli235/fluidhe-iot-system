@@ -21,6 +21,7 @@ export interface UserItem {
 
 export interface TelemetryPoint {
   timestamp: string;
+  created_at?: string;
   ti1: number; // Hot Inlet (°C)
   ti2: number; // Hot Outlet (°C - Monitored at Heater 2 Outlet)
   ti3: number; // Cold Inlet (°C)
@@ -69,22 +70,28 @@ export interface TelemetryRow {
   warning_status: string; // "NORMAL" | "WARN_FLOW_HIGH"
 }
 
+export type ControlMode = 'AUTO' | 'MANUAL' | 'STANDBY' | 'KALIBRASI' | 'SHUTDOWN';
+
 export interface DeviceControlsRow {
   id: number;                                // Row ID = 1 (int4)
   updated_at?: string;                       // timestamptz
-  control_mode: 'AUTO' | 'MANUAL';           // text
+  control_mode: ControlMode;                 // text (AUTO / MANUAL / STANDBY / KALIBRASI / SHUTDOWN)
   flow_mode: 'COUNTER' | 'CO-CURRENT';       // text
   heater_status: boolean;                    // bool
   heater_1_status?: boolean;                 // bool (Heater 1 status)
   heater_2_status?: boolean;                 // bool (Heater 2 status)
+  trigger_power?: boolean;                   // bool (Manual Web Push Power Button)
   servo_angle: number;                       // int4 (Valve 1 / Panas: 0 - 100%)
   servo_angle_2?: number;                    // int4 (Valve 2 / Dingin: 0 - 100%)
   target_temp: number;                       // float4
+  target_upper?: number;                     // float4 (Suhu Atas: Heater 2 OFF)
+  target_lower?: number;                     // float4 (Suhu Bawah: Heater 2 ON)
   uap_status?: boolean;                      // bool
   uap_auto_status?: boolean;                 // UI extension
   uap_interval_min?: number;                 // int4 (Interval buka uap menit)
   valve_duration?: number;                   // int4 (Durasi buka uap detik)
   air_dingin?: boolean;                      // bool (Solenoid air dingin)
+  pompa_ekstra?: boolean;                    // bool (Pompa sirkulasi air panas)
   target_flow?: number;                      // numeric
   btn_up?: boolean;                          // bool
   btn_onoff?: boolean;                       // bool
@@ -136,3 +143,26 @@ export interface SyncFeedback {
   detail: string;
   type: 'syncing' | 'success' | 'idle';
 }
+
+export type SystemOperationalStatus = 'OFF' | 'STANDBY' | 'ACTIVE' | 'STOPPING';
+
+export interface SystemSession {
+  id: string; // e.g. "SES-20260908-103522"
+  title?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm:ss
+  startTimeMs: number;
+  endTime?: string; // HH:mm:ss
+  endTimeMs?: number;
+  durationSeconds?: number;
+  operatorName: string;
+  operatorEmail?: string;
+  operatorRole?: string;
+  classGroup?: string;
+  pointsCount: number;
+  flowMode?: string;
+  maxTemp?: number;
+  avgFlow?: number;
+  data: TelemetryPoint[];
+}
+

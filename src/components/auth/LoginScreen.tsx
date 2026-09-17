@@ -166,15 +166,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       {/* ─── MAIN HERO & LOGIN CONTAINER ─── */}
       <main className="max-w-md w-full mx-auto my-auto py-2 sm:py-4 z-10 relative">
-        
-        {/* Industrial SCADA Lab Interface pill badge (Tengah di Atas Card) */}
-        <div className="text-center mb-2.5 sm:mb-3.5">
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 py-1 sm:px-4 sm:py-1.5 rounded-full bg-white/40 backdrop-blur-xl border border-white/70 text-slate-900 text-[10.5px] sm:text-xs font-bold shadow-md">
-            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-600 animate-pulse" />
-            <span>Industrial SCADA Lab Interface</span>
-          </div>
-        </div>
-
         {/* Main Glassmorphic Card (Normal Size) */}
         <div className="p-5 sm:p-8 bg-white/95 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.6)] rounded-3xl sm:rounded-[2.5rem] border border-white relative overflow-hidden text-slate-900">
           

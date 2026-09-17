@@ -11,15 +11,20 @@ const VALID_COLUMNS = new Set([
   'heater_1_status',
   'heater_2_status',
   'target_temp',
+  'target_upper',
+  'target_lower',
   'target_flow',
   'servo_angle',
   'servo_angle_2',
   'uap_status',
+  'uap_interval_min',
+  'pompa_ekstra',
   'valve_duration',
   'air_dingin',
   'btn_up',
   'btn_onoff',
   'btn_down',
+  'trigger_power',
   'step_up_count',
   'step_down_count',
   'temp_1',
@@ -99,10 +104,10 @@ export async function PATCH(req: NextRequest) {
       mappedBody.heater_1_status = Boolean(mappedBody.btn_onoff);
     }
 
-    if ('heater_1_status' in mappedBody || 'heater_2_status' in mappedBody) {
-      const h1 = mappedBody.heater_1_status ?? false;
-      const h2 = mappedBody.heater_2_status ?? false;
-      mappedBody.heater_status = Boolean(h1 || h2);
+    if ('heater_1_status' in mappedBody && 'heater_2_status' in mappedBody) {
+      mappedBody.heater_status = Boolean(mappedBody.heater_1_status || mappedBody.heater_2_status);
+    } else if ('heater_status' in mappedBody) {
+      mappedBody.heater_status = Boolean(mappedBody.heater_status);
     }
 
     // Filter payload hanya ke kolom yang valid di database device_controls
