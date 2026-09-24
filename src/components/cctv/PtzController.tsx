@@ -10,7 +10,7 @@ import {
   RotateCw,
   Activity
 } from 'lucide-react';
-import { TelemetryPoint } from '@/types';
+import { TelemetryPoint, TempLabels } from '@/types';
 
 export interface PtzControllerProps {
   ptzMoving: string | null;
@@ -18,6 +18,8 @@ export interface PtzControllerProps {
   onPtzPreset?: (label: string, presetKey: string) => void;
   latestData: TelemetryPoint;
   connected?: boolean;
+  isHardwareOnline?: boolean;
+  tempLabels?: TempLabels;
 }
 
 export const PtzController: React.FC<PtzControllerProps> = ({
@@ -26,6 +28,8 @@ export const PtzController: React.FC<PtzControllerProps> = ({
   onPtzPreset,
   latestData,
   connected = false,
+  isHardwareOnline = false,
+  tempLabels,
 }) => {
   return (
     <div className="space-y-6">
@@ -114,26 +118,52 @@ export const PtzController: React.FC<PtzControllerProps> = ({
 
       {/* Telemetry Live Data Card */}
       <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 shadow-xs">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200/80 pb-3">
-          <Activity className="w-4 h-4 text-sky-600" /> Sensor Terhubung
-        </h3>
+        <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-sky-600" /> Sensor Terhubung
+          </h3>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1.5 ${
+            isHardwareOnline
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+              : 'text-amber-700 bg-amber-50 border-amber-200'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isHardwareOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
+            {isHardwareOnline ? 'Live Hardware' : 'Menunggu Alat'}
+          </span>
+        </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-            <span className="text-slate-500 text-[10.5px] font-semibold block">TI1 (Hot In):</span>
-            <strong className="text-slate-900 font-extrabold font-mono text-sm">{latestData.ti1.toFixed(1)}°C</strong>
+            <span className="text-slate-500 text-[10.5px] font-semibold block truncate" title={tempLabels?.t1 || 'T1 (Hot In)'}>
+              {tempLabels?.t1 ? 'T1' : 'T1 (Hot In)'}:
+            </span>
+            <strong className="text-slate-900 font-extrabold font-mono text-sm block mt-0.5">
+              {isHardwareOnline ? `${latestData.ti1.toFixed(1)}°C` : '-- °C'}
+            </strong>
           </div>
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-            <span className="text-slate-500 text-[10.5px] font-semibold block">TI2 (Hot Out):</span>
-            <strong className="text-slate-900 font-extrabold font-mono text-sm">{latestData.ti2.toFixed(1)}°C</strong>
+            <span className="text-slate-500 text-[10.5px] font-semibold block truncate" title={tempLabels?.t2 || 'T2 (Cold Out)'}>
+              {tempLabels?.t2 ? 'T2' : 'T2 (Cold Out)'}:
+            </span>
+            <strong className="text-slate-900 font-extrabold font-mono text-sm block mt-0.5">
+              {isHardwareOnline ? `${latestData.ti2.toFixed(1)}°C` : '-- °C'}
+            </strong>
           </div>
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-            <span className="text-slate-500 text-[10.5px] font-semibold block">TI3 (Cold In):</span>
-            <strong className="text-sky-700 font-extrabold font-mono text-sm">{latestData.ti3.toFixed(1)}°C</strong>
+            <span className="text-slate-500 text-[10.5px] font-semibold block truncate" title={tempLabels?.t3 || 'T3 (Cold In)'}>
+              {tempLabels?.t3 ? 'T3' : 'T3 (Cold In)'}:
+            </span>
+            <strong className="text-sky-700 font-extrabold font-mono text-sm block mt-0.5">
+              {isHardwareOnline ? `${latestData.ti3.toFixed(1)}°C` : '-- °C'}
+            </strong>
           </div>
           <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-            <span className="text-slate-500 text-[10.5px] font-semibold block">TI4 (Cold Out):</span>
-            <strong className="text-sky-700 font-extrabold font-mono text-sm">{latestData.ti4.toFixed(1)}°C</strong>
+            <span className="text-slate-500 text-[10.5px] font-semibold block truncate" title={tempLabels?.t4 || 'T4 (Hot Out)'}>
+              {tempLabels?.t4 ? 'T4' : 'T4 (Hot Out)'}:
+            </span>
+            <strong className="text-sky-700 font-extrabold font-mono text-sm block mt-0.5">
+              {isHardwareOnline ? `${latestData.ti4.toFixed(1)}°C` : '-- °C'}
+            </strong>
           </div>
         </div>
       </div>

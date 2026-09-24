@@ -1280,7 +1280,7 @@ export default function FluidHEDashboard() {
   }, []);
 
   // EZVIZ Mobile App Style Controls
-  const [cctvAudioMuted, setCctvAudioMuted] = useState<boolean>(false);
+  const [cctvAudioMuted, setCctvAudioMuted] = useState<boolean>(true);
   const [audioUserActivated, setAudioUserActivated] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [cctvVolume, setCctvVolume] = useState<number>(85);
@@ -1882,10 +1882,17 @@ export default function FluidHEDashboard() {
     setWebrtcConnected(false);
     setWebrtcError(null);
 
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+
     try {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
+
+      const pc = new RTCPeerConnection(
+        isLocal
+          ? { iceServers: [] }
+          : { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      );
       pcRef.current = pc;
 
       const videoTransceiver = pc.addTransceiver('video', { direction: 'recvonly' });
@@ -1911,21 +1918,32 @@ export default function FluidHEDashboard() {
       pc.ontrack = (event) => {
         if (event.receiver) setZeroDelayHint(event.receiver);
 
-        if (videoRef.current) {
-          if (event.streams && event.streams[0]) {
-            videoRef.current.srcObject = event.streams[0];
-            webrtcStreamRef.current = event.streams[0];
-          } else if (event.track) {
-            if (!videoRef.current.srcObject) {
-              videoRef.current.srcObject = new MediaStream();
+        let stream = webrtcStreamRef.current;
+        if (!stream) {
+          stream = new MediaStream();
+          webrtcStreamRef.current = stream;
+        }
+        if (event.track && !stream.getTracks().some(t => t.id === event.track.id)) {
+          stream.addTrack(event.track);
+        }
+        if (event.streams && event.streams[0]) {
+          event.streams[0].getTracks().forEach(track => {
+            if (!stream!.getTracks().some(t => t.id === track.id)) {
+              stream!.addTrack(track);
             }
-            (videoRef.current.srcObject as MediaStream).addTrack(event.track);
+          });
+        }
+
+        if (videoRef.current) {
+          if (videoRef.current.srcObject !== stream) {
+            videoRef.current.srcObject = stream;
           }
           videoRef.current.muted = cctvAudioMuted;
+          videoRef.current.volume = (cctvVolume || 100) / 100;
           videoRef.current.play().catch(() => { });
-          setWebrtcConnected(true);
-          setWebrtcError(null);
         }
+        setWebrtcConnected(true);
+        setWebrtcError(null);
       };
 
       pc.onconnectionstatechange = () => {
@@ -1933,17 +1951,19 @@ export default function FluidHEDashboard() {
         if (state === 'connected') {
           setWebrtcConnected(true);
           setWebrtcError(null);
-          // Pastikan semua receiver tetap 0-delay saat koneksi established
           try {
             pc.getReceivers().forEach((r) => setZeroDelayHint(r));
           } catch (e) {}
           if (videoRef.current) {
+            if (!videoRef.current.srcObject && webrtcStreamRef.current) {
+              videoRef.current.srcObject = webrtcStreamRef.current;
+            }
             videoRef.current.play().catch(() => { });
           }
         } else if (state === 'failed') {
           setWebrtcConnected(false);
-          setWebrtcError('WebRTC direct gagal. Mengalihkan ke streaming cloud...');
-          if (cctvPublicUrl) {
+          setWebrtcError('Koneksi kamera sedang menghubungkan ulang...');
+          if (!isLocal && cctvPublicUrl) {
             setCctvStreamSource('custom');
           }
         } else if (state === 'disconnected' || state === 'closed') {
@@ -1953,10 +1973,6 @@ export default function FluidHEDashboard() {
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-      const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const isLocal = host === 'localhost' || host === '127.0.0.1';
 
       const endpoints: string[] = [];
       // Jika diakses lokal, dahulukan selalu localhost:8889
@@ -1989,9 +2005,9 @@ export default function FluidHEDashboard() {
       }
 
       if (!resp || !resp.ok) {
-        setWebrtcError('Koneksi WebRTC direct gagal. Mengalihkan ke streaming cloud...');
+        setWebrtcError('Koneksi kamera sedang menghubungkan...');
         setWebrtcConnected(false);
-        if (cctvPublicUrl) {
+        if (!isLocal && cctvPublicUrl) {
           setCctvStreamSource('custom');
         }
         return;
@@ -2003,9 +2019,9 @@ export default function FluidHEDashboard() {
       setWebrtcError(null);
     } catch (err: any) {
       console.warn('WebRTC connect notice:', err?.message || err);
-      setWebrtcError('Mengalihkan ke streaming cloud...');
+      setWebrtcError('Koneksi kamera terputus. Mencoba menyambung...');
       setWebrtcConnected(false);
-      if (cctvPublicUrl) {
+      if (!isLocal && cctvPublicUrl) {
         setCctvStreamSource('custom');
       }
     }
@@ -4123,6 +4139,8 @@ export default function FluidHEDashboard() {
               handlePtzPreset={handlePtzPreset}
               ptzMoving={ptzMoving}
               latestData={latestData}
+              isHardwareOnline={isHardwareOnline}
+              tempLabels={tempLabels}
             />
           )}
 

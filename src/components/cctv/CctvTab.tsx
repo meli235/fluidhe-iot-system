@@ -12,10 +12,13 @@ import {
   Volume2,
   VolumeX,
   Volume1,
-  AlertTriangle
+  AlertTriangle,
+  Wifi,
+  RotateCw
 } from 'lucide-react';
-import { TelemetryPoint } from '@/types';
+import { TelemetryPoint, TempLabels } from '@/types';
 import { PtzController } from './PtzController';
+import { CctvWifiModal } from './CctvWifiModal';
 
 export interface CctvTabProps {
   selectedCamera: 'cam1' | 'cam2' | 'cam3';
@@ -48,6 +51,8 @@ export interface CctvTabProps {
   handlePtzPreset: (label: string, presetKey: string) => void;
   ptzMoving: string | null;
   latestData: TelemetryPoint;
+  isHardwareOnline?: boolean;
+  tempLabels?: TempLabels;
 }
 
 export const CctvTab: React.FC<CctvTabProps> = ({
@@ -79,8 +84,48 @@ export const CctvTab: React.FC<CctvTabProps> = ({
   handlePtzAction,
   handlePtzPreset,
   ptzMoving,
-  latestData
+  latestData,
+  isHardwareOnline = false,
+  tempLabels
 }) => {
+  const [isWifiModalOpen, setIsWifiModalOpen] = React.useState(false);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!webrtcConnected) {
+      connectWebRTC();
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const scriptId = 'fluidhe-video-stream-script';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.type = 'module';
+        script.src = '/video-stream.js';
+        document.head.appendChild(script);
+      }
+    }
+  }, []);
+
+  const wsRemoteUrl = React.useMemo(() => {
+    if (!cctvIpUrl) return '';
+    let url = cctvIpUrl.trim();
+    if (url.startsWith('https://')) {
+      url = url.replace(/^https:\/\//i, 'wss://');
+    } else if (url.startsWith('http://')) {
+      url = url.replace(/^http:\/\//i, 'ws://');
+    }
+    if (url.includes('/stream.html')) {
+      url = url.replace(/\/stream\.html.*/i, '/api/ws?src=he_cctv&mode=mse');
+    } else if (!url.includes('/api/ws')) {
+      url = url.replace(/\/+$/, '') + '/api/ws?src=he_cctv&mode=mse';
+    }
+    return url;
+  }, [cctvIpUrl]);
+
   return (
     <div id="tour-cctv-tab" className="space-y-6">
       {/* Header Bar */}
@@ -91,59 +136,36 @@ export const CctvTab: React.FC<CctvTabProps> = ({
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
               CCTV Live Monitoring — Heat Exchanger Lab
             </h2>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-              webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl))
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl))
                 ? 'bg-sky-50 text-sky-700 border-sky-200'
                 : 'bg-slate-100 text-slate-600 border-slate-200'
-            }`}>
+              }`}>
               {webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'STREAM ONLINE' : 'STREAM OFFLINE'}
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRefreshing(true);
+                connectWebRTC();
+                setTimeout(() => setIsRefreshing(false), 1200);
+              }}
+              className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              title="Segarkan Kamera"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-sky-600' : ''}`} />
+            </button>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            FluidHE IP Cam (1080p Full HD) • Transmisi RTSP Real-Time
-          </p>
         </div>
 
-        {/* Channel Switchers */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+        {/* Ganti Jaringan Wi-Fi (Menggantikan Channel Switchers) */}
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              setSelectedCamera('cam1');
-              handlePtzAction('rig');
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${selectedCamera === 'cam1'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-              }`}
+            onClick={() => setIsWifiModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-700 border border-slate-200 hover:border-sky-200 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
           >
-            Rig Shell &amp; Tube
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedCamera('cam2');
-              handlePtzAction('tank');
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${selectedCamera === 'cam2'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-              }`}
-          >
-            Tangki Fluida
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedCamera('cam3');
-              handlePtzAction('valve');
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${selectedCamera === 'cam3'
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-              }`}
-          >
-            Panel Valve
+            <Wifi className="w-4 h-4 text-sky-600" />
+            <span>Ganti Jaringan Wi-Fi</span>
           </button>
         </div>
       </div>
@@ -165,7 +187,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
               <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-[11px] font-semibold tracking-wider">
-                  LIVE • {selectedCamera === 'cam1' ? 'RIG SHELL & TUBE' : selectedCamera === 'cam2' ? 'STORAGE TANK' : 'VALVE MANIFOLD'}
+                  LIVE • RIG HEAT EXCHANGER LAB
                 </span>
               </div>
 
@@ -194,112 +216,90 @@ export const CctvTab: React.FC<CctvTabProps> = ({
             <div className="absolute inset-0 z-10 w-full h-full flex items-center justify-center bg-black overflow-hidden rounded-2xl">
               {cctvStreamSource !== 'custom' ? (
                 <>
-                  {!cctvAudioMuted && !audioUserActivated && (
-                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 rounded-2xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAudioUserActivated(true);
-                          if (videoRef.current) {
-                            videoRef.current.muted = false;
-                            videoRef.current.play().catch(() => { });
-                          }
-                        }}
-                        className="px-6 py-3 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold text-sm flex items-center gap-2 transition cursor-pointer shadow-lg shadow-sky-600/30"
-                      >
-                        <Volume2 className="w-5 h-5" /> Klik untuk Nyalakan Audio Lab
-                      </button>
-                    </div>
-                  )}
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
-                    muted={!audioUserActivated || cctvAudioMuted}
+                    muted={cctvAudioMuted}
                     className="w-full h-full object-contain rounded-2xl"
+                    onLoadedMetadata={() => {
+                      if (videoRef.current) {
+                        videoRef.current.play().catch(() => {});
+                      }
+                    }}
                   />
+
+                  {/* Corner Unmute Badge */}
+                  {webrtcConnected && cctvAudioMuted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCctvAudioMuted(false);
+                        setAudioUserActivated(true);
+                        if (videoRef.current) {
+                          videoRef.current.muted = false;
+                          videoRef.current.volume = (cctvVolume || 100) / 100;
+                          videoRef.current.play().catch(() => {});
+                        }
+                        triggerCctvToast('Audio CCTV aktif', 'info');
+                      }}
+                      className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/15 rounded-full text-white text-xs font-semibold shadow-lg transition cursor-pointer"
+                    >
+                      <VolumeX className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Audio Dibisukan &bull; Klik untuk Suara</span>
+                    </button>
+                  )}
+
+                  {/* Friendly Standby / Connecting State */}
                   {!webrtcConnected && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-3 bg-black/95 z-20 overflow-y-auto">
-                      {webrtcError ? (
-                        <div className="max-w-md w-full flex flex-col items-center space-y-3">
-                          <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center">
-                            <AlertTriangle className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-white">Kamera Belum Terhubung</h4>
-                            <p className="text-xs text-zinc-400 mt-1">
-                              {typeof window !== 'undefined' && window.location.protocol === 'https:' && !cctvPublicUrl
-                                ? 'Anda membuka aplikasi dari Vercel / HTTPS. Diperlukan URL Cloudflare Tunnel agar stream CCTV lab dapat diakses.'
-                                : webrtcError}
-                            </p>
-                          </div>
-
-                          {/* Cloudflare Tunnel Input Box */}
-                          <div className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl p-3 text-left space-y-2">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-semibold text-zinc-300">
-                                URL Cloudflare Tunnel (HTTPS)
-                              </label>
-                              <span className="text-[10px] text-sky-400">Dari start-cctv-tunnel.bat</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={cctvPublicUrl || ''}
-                                onChange={(e) => {
-                                  if (setCctvPublicUrl) setCctvPublicUrl(e.target.value);
-                                }}
-                                placeholder="https://xxx.trycloudflare.com"
-                                className="flex-1 bg-black/70 border border-zinc-700 focus:border-sky-500 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 outline-none"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (cctvPublicUrl && setCctvPublicUrl) {
-                                    localStorage.setItem('fluidhe_cctv_public_url', cctvPublicUrl.trim().replace(/\/+$/, ''));
-                                  }
-                                  connectWebRTC();
-                                }}
-                                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap"
-                              >
-                                Sambungkan
-                              </button>
-                            </div>
-                            <p className="text-[10px] text-zinc-500">
-                              💡 Jalankan <b>start-cctv-tunnel.bat</b> di PC Lab, lalu salin URL yang berakhiran <i>.trycloudflare.com</i> ke kotak di atas.
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => connectWebRTC()}
-                              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold rounded-xl transition cursor-pointer"
-                            >
-                              Coba Sambung Ulang
-                            </button>
-                          </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-4 bg-zinc-950/90 backdrop-blur-sm z-20">
+                      <div className="relative flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-2xl bg-sky-500/10 text-sky-400 flex items-center justify-center border border-sky-500/20 shadow-lg">
+                          <Video className="w-8 h-8" />
                         </div>
-                      ) : (
-                        <>
-                          <div className="w-12 h-12 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center animate-pulse">
-                            <Video className="w-6 h-6" />
-                          </div>
-                          <p className="text-sm font-bold text-white">Menyambungkan ke Kamera via WebRTC...</p>
-                          <p className="text-xs text-zinc-500 font-mono">go2rtc &bull; port 8889</p>
-                        </>
-                      )}
+                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-1.5 max-w-sm">
+                        <h4 className="text-sm font-bold text-white tracking-wide">
+                          Menghubungkan Kamera Laboratorium
+                        </h4>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          Memuat transmisi siaran langsung CCTV secara otomatis...
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => connectWebRTC()}
+                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5 border border-zinc-700 shadow-sm"
+                        >
+                          <RotateCw className="w-3.5 h-3.5" />
+                          <span>Muat Ulang Kamera</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsWifiModalOpen(true)}
+                          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-sky-600/20"
+                        >
+                          <Wifi className="w-3.5 h-3.5" />
+                          <span>Pengaturan Wi-Fi</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </>
               ) : (
-                <iframe
-                  src={cctvIpUrl}
-                  className="w-full h-full border-0 rounded-2xl bg-black"
-                  allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *"
-                  allowFullScreen
-                  title="Live CCTV Feed"
-                />
+                <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
+                  {React.createElement('video-stream', {
+                    src: wsRemoteUrl,
+                    style: { width: '100%', height: '100%', display: 'block' }
+                  })}
+                </div>
               )}
             </div>
 
@@ -344,7 +344,6 @@ export const CctvTab: React.FC<CctvTabProps> = ({
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 shadow-xs">
             <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-200/80">
               <span className="font-bold text-slate-800">Kontrol Cepat Kamera</span>
-              <span className="text-[11px] text-slate-500 font-medium">IP Camera 360 Series</span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -360,11 +359,10 @@ export const CctvTab: React.FC<CctvTabProps> = ({
               <button
                 type="button"
                 onClick={handleToggleManualRecord}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl transition text-xs font-bold gap-1.5 border shadow-xs cursor-pointer ${
-                  isManualRecording
+                className={`flex flex-col items-center justify-center p-3 rounded-xl transition text-xs font-bold gap-1.5 border shadow-xs cursor-pointer ${isManualRecording
                     ? 'bg-red-600 text-white border-red-500 shadow-md shadow-red-500/20'
                     : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
+                  }`}
               >
                 <Disc className={`w-4 h-4 ${isManualRecording ? 'animate-spin' : 'text-sky-600'}`} />
                 <span className="text-[11px]">{isManualRecording ? 'Stop Rekam' : 'Rekam Video'}</span>
@@ -385,11 +383,10 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                   }
                   triggerCctvToast(!nextMuted ? 'Audio CCTV aktif' : 'Audio CCTV dinonaktifkan', 'info');
                 }}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl transition text-xs font-bold gap-1.5 border shadow-xs cursor-pointer ${
-                  !cctvAudioMuted
+                className={`flex flex-col items-center justify-center p-3 rounded-xl transition text-xs font-bold gap-1.5 border shadow-xs cursor-pointer ${!cctvAudioMuted
                     ? 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 text-white border-sky-400/40 shadow-sm'
                     : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
+                  }`}
               >
                 {!cctvAudioMuted ? <Volume2 className="w-4 h-4 text-white" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
                 <span className="text-[11px]">{!cctvAudioMuted ? 'Suara ON' : 'Suara OFF'}</span>
@@ -433,9 +430,19 @@ export const CctvTab: React.FC<CctvTabProps> = ({
           onPtzPreset={handlePtzPreset}
           latestData={latestData}
           connected={webrtcConnected}
+          isHardwareOnline={isHardwareOnline}
+          tempLabels={tempLabels}
         />
 
       </div>
+
+      {/* Modal Pengaturan Wi-Fi CCTV */}
+      <CctvWifiModal
+        isOpen={isWifiModalOpen}
+        onClose={() => setIsWifiModalOpen(false)}
+        onConnected={() => connectWebRTC()}
+        triggerToast={triggerCctvToast}
+      />
     </div>
   );
 };
