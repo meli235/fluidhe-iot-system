@@ -119,9 +119,9 @@ export const CctvTab: React.FC<CctvTabProps> = ({
       url = url.replace(/^http:\/\//i, 'ws://');
     }
     if (url.includes('/stream.html')) {
-      url = url.replace(/\/stream\.html.*/i, '/api/ws?src=he_cctv&mode=mse');
+      url = url.replace(/\/stream\.html.*/i, '/api/ws?src=he_cctv');
     } else if (!url.includes('/api/ws')) {
-      url = url.replace(/\/+$/, '') + '/api/ws?src=he_cctv&mode=mse';
+      url = url.replace(/\/+$/, '') + '/api/ws?src=he_cctv';
     }
     return url;
   }, [cctvIpUrl]);
@@ -131,6 +131,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
   React.useEffect(() => {
     if (videoStreamRef.current && wsRemoteUrl) {
       try {
+        videoStreamRef.current.mode = 'mse';
         videoStreamRef.current.src = wsRemoteUrl;
       } catch (_) {}
     }
@@ -307,6 +308,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                 <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
                   {React.createElement('video-stream', {
                     ref: videoStreamRef,
+                    mode: 'mse',
                     src: wsRemoteUrl,
                     style: { width: '100%', height: '100%', display: 'block' }
                   })}

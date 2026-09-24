@@ -9,6 +9,11 @@ class VideoStream extends VideoRTC {
         return ['src', 'mode'];
     }
 
+    constructor() {
+        super();
+        this.mode = 'mse';
+    }
+
     set divMode(value) {
         this.querySelector('.mode').innerText = value;
         this.querySelector('.status').innerText = '';

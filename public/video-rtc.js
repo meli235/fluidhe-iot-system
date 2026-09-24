@@ -36,7 +36,7 @@ export class VideoRTC extends HTMLElement {
          * [config] Supported modes (webrtc, webrtc/tcp, mse, hls, mp4, mjpeg).
          * @type {string}
          */
-        this.mode = 'webrtc,mse,hls,mjpeg';
+        this.mode = 'mse';
 
         /**
          * [Config] Requested medias (video, audio, microphone).
