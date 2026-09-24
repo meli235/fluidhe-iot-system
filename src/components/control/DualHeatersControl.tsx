@@ -73,6 +73,7 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
 
   // Local state for Set Point & Tolerance
   const [localSp, setLocalSp] = useState<number>(targetTempHot ?? targetTemp ?? 50.0);
+  const [spInput, setSpInput] = useState<string>(String(targetTempHot ?? targetTemp ?? 50.0));
   const [localTol, setLocalTol] = useState<number>(toleranceLevel ?? 1);
 
   // Local state for Calibration Inputs
@@ -84,7 +85,10 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
 
   // Sync with incoming props
   useEffect(() => {
-    if (targetTempHot !== undefined) setLocalSp(targetTempHot);
+    if (targetTempHot !== undefined) {
+      setLocalSp(targetTempHot);
+      setSpInput(String(targetTempHot));
+    }
   }, [targetTempHot]);
 
   useEffect(() => {
@@ -107,11 +111,33 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
   const calcUpper = parseFloat((localSp + localTol).toFixed(1));
   const calcLower = parseFloat((localSp - localTol).toFixed(1));
 
+  // Handle direct Set Point commit
+  const handleCommitSp = () => {
+    if (emergencyStopped) return;
+    const parsed = parseFloat(spInput);
+    if (isNaN(parsed)) {
+      setSpInput(String(localSp));
+      return;
+    }
+    const clamped = Math.min(90, Math.max(20, parseFloat(parsed.toFixed(1))));
+    setLocalSp(clamped);
+    setSpInput(String(clamped));
+
+    if (onSaveThermostatSetup) {
+      onSaveThermostatSetup(clamped, localTol);
+    } else if (onSaveThermostatLimits) {
+      onSaveThermostatLimits(clamped + localTol, clamped - localTol);
+    } else if (onAdjustSetPoint) {
+      onAdjustSetPoint(clamped - localSp);
+    }
+  };
+
   // Handle Set Point adjust (+1 / -1)
   const handleSpStep = (delta: number) => {
     if (emergencyStopped) return;
     const nextVal = Math.min(90, Math.max(20, parseFloat((localSp + delta).toFixed(1))));
     setLocalSp(nextVal);
+    setSpInput(String(nextVal));
     if (onAdjustSetPoint) {
       onAdjustSetPoint(delta);
     } else if (onSaveThermostatSetup) {
@@ -261,14 +287,14 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
           <div className="space-y-2.5">
             <div className="flex justify-between items-center text-xs font-bold text-slate-800 gap-2 min-h-[26px]">
               <span className="flex items-center gap-1.5 truncate">
-                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
                 <span className="font-extrabold text-slate-800">Heater 2 (Pemanas Booster)</span>
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span
                   className={`px-2 py-0.5 rounded-md font-black text-[10.5px] border ${
                     isH2On
-                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                       : 'bg-slate-100 text-slate-600 border-slate-200'
                   }`}
                 >
@@ -276,7 +302,7 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
                 </span>
                 <span
                   className={`px-2 py-0.5 rounded-md font-black text-[10.5px] ${
-                    isH2On ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'
+                    isH2On ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
                   }`}
                 >
                   {isH2On ? '500 Watt' : '0 Watt'}
@@ -295,7 +321,7 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
                 isAuto
                   ? 'bg-slate-800 text-white opacity-90 cursor-not-allowed'
                   : isH2On
-                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-500/20'
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
               }`}
             >
@@ -310,12 +336,12 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
             <div className="flex justify-between items-center text-[11px]">
               <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-amber-500" /> Mode Booster Tambahan
+                <Zap className="w-3.5 h-3.5 text-indigo-600" /> Mode Booster Tambahan
               </span>
               <span
                 className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
                   isH2On
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                     : 'bg-slate-100 text-slate-600 border-slate-200'
                 }`}
               >
@@ -333,7 +359,7 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
       <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-3.5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
           <div className="flex items-center gap-2">
-            <span className="p-1 rounded-md bg-amber-50 text-amber-600 border border-amber-200">
+            <span className="p-1 rounded-md bg-sky-50 text-sky-600 border border-sky-200">
               <Target className="w-4 h-4" />
             </span>
             <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
@@ -346,34 +372,47 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Row 1: SET POINT UTAMA */}
-          <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <div>
+          {/* Row 1: SET POINT UTAMA (INPUT NILAI LANGSUNG) */}
+          <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200 gap-3">
+            <div className="shrink-0">
               <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-wider">
                 SET POINT UTAMA
               </span>
-              <span className="text-lg font-black text-amber-600">
-                {localSp.toFixed(1)} °C
+              <span className="text-xs font-semibold text-slate-400">
+                Rentang: 20 – 90 °C
               </span>
             </div>
-            <div className="flex gap-1.5">
+
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex items-center">
+                <input
+                  type="number"
+                  min="20"
+                  max="90"
+                  step="0.5"
+                  value={spInput}
+                  disabled={emergencyStopped}
+                  onChange={(e) => setSpInput(e.target.value)}
+                  onBlur={handleCommitSp}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                      handleCommitSp();
+                    }
+                  }}
+                  className="w-24 bg-white border border-sky-300 text-sky-950 font-black text-base px-2.5 py-1.5 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 shadow-2xs"
+                  placeholder="50.0"
+                />
+                <span className="ml-1.5 text-xs font-extrabold text-slate-600">°C</span>
+              </div>
               <button
                 type="button"
-                onClick={() => handleSpStep(-1)}
+                onClick={handleCommitSp}
                 disabled={emergencyStopped}
-                className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-lg font-bold text-xs shadow-xs active:scale-95 transition cursor-pointer"
-                title="Turunkan Set Point 1°C"
+                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs shadow-xs active:scale-95 transition cursor-pointer"
+                title="Terapkan Nilai Set Point"
               >
-                -1°
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSpStep(1)}
-                disabled={emergencyStopped}
-                className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-lg font-bold text-xs shadow-xs active:scale-95 transition cursor-pointer"
-                title="Naikkan Set Point 1°C"
-              >
-                +1°
+                Set
               </button>
             </div>
           </div>

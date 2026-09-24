@@ -59,10 +59,10 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
         <div className="p-3.5 sm:p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-3 flex flex-col justify-between">
           <div className="flex justify-between items-center text-xs font-bold text-slate-800">
             <span className="flex items-center gap-1.5 text-slate-700">
-              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+              <Flame className="w-4 h-4 text-rose-500 shrink-0" />
               Katup FC1 (Panas)
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 font-mono font-black text-xs sm:text-sm shadow-2xs">
+            <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 font-mono font-black text-xs sm:text-sm shadow-2xs">
               {fc1Valve}%
             </span>
           </div>
@@ -77,7 +77,7 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
               value={fc1Valve}
               onChange={(e) => onChangeFc1Valve(Number(e.target.value))}
               disabled={emergencyStopped || isAuto}
-              className={`w-full h-2.5 bg-slate-200 rounded-lg appearance-none accent-amber-500 transition-all ${
+              className={`w-full h-2.5 bg-slate-200 rounded-lg appearance-none accent-rose-500 transition-all ${
                 isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
               }`}
             />
@@ -86,7 +86,7 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
               {VALVE_TICKS.map((tick) => (
                 <span
                   key={tick}
-                  className={`transition-all ${fc1Valve === tick ? 'text-amber-600 font-black scale-110' : 'text-slate-400'}`}
+                  className={`transition-all ${fc1Valve === tick ? 'text-rose-600 font-black scale-110' : 'text-slate-400'}`}
                 >
                   {tick}%
                 </span>

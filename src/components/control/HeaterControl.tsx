@@ -126,10 +126,10 @@ export const HeaterControl: React.FC<HeaterControlProps> = ({
       </div>
 
       {/* Thermostat Limits Range (Heater 2 Histeresis) */}
-      <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-amber-200/90 shadow-2xs space-y-2">
+      <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-200/90 shadow-2xs space-y-2">
         <div className="flex justify-between items-center">
-          <h5 className="font-extrabold text-[10.5px] sm:text-xs text-amber-700 flex items-center gap-1">
-            <Sliders className="w-3.5 h-3.5 text-amber-600" />
+          <h5 className="font-extrabold text-[10.5px] sm:text-xs text-indigo-700 flex items-center gap-1">
+            <Sliders className="w-3.5 h-3.5 text-indigo-600" />
             🎯 Thermostat Limit (Heater 2)
           </h5>
           <span className="text-[9px] text-slate-400 font-bold">Histeresis</span>
@@ -178,7 +178,7 @@ export const HeaterControl: React.FC<HeaterControlProps> = ({
           className={`w-full py-1.5 rounded-lg font-black text-[10px] tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
             saveSuccess
               ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
+              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
           }`}
         >
           {saveSuccess ? (
