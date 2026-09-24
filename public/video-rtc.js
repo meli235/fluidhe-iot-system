@@ -187,6 +187,8 @@ export class VideoRTC extends HTMLElement {
         return this.CODECS
             .filter(codec => this.media.includes(codec.includes('vc1') ? 'video' : 'audio'))
             .filter(codec => isSupported(`video/mp4; codecs="${codec}"`)).join();
+    }
+
     static get observedAttributes() {
         return ['src', 'mode'];
     }

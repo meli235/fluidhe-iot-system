@@ -5,6 +5,10 @@ import {VideoRTC} from './video-rtc.js';
  * Also you can check this example: https://github.com/AlexxIT/WebRTC
  */
 class VideoStream extends VideoRTC {
+    static get observedAttributes() {
+        return ['src', 'mode'];
+    }
+
     set divMode(value) {
         this.querySelector('.mode').innerText = value;
         this.querySelector('.status').innerText = '';
