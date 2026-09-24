@@ -42,7 +42,10 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await res.json();
-    const sorted = Array.isArray(data) ? data.reverse() : [];
+    const cleanData = Array.isArray(data)
+      ? data.filter((item: any) => !String(item?.warning_status || '').startsWith('CCTV_URL:'))
+      : [];
+    const sorted = cleanData.reverse();
     return NextResponse.json({ data: sorted });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error fetching telemetry', data: [] }, { status: 500 });

@@ -1974,7 +1974,7 @@ export default function FluidHEDashboard() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cctvStreamSource, activeTab]);
+  }, [cctvStreamSource, activeTab, cctvPublicUrl]);
 
   // Anti-Delay Sync: Segera sinkronkan ulang live stream jika tab browser aktif kembali
   useEffect(() => {
