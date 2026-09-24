@@ -128,7 +128,11 @@ export const CctvTab: React.FC<CctvTabProps> = ({
 
   const isYouTube = React.useMemo(() => {
     const raw = (cctvIpUrl || cctvPublicUrl || '').toLowerCase();
-    return raw.includes('youtube.com') || raw.includes('youtu.be');
+    if (raw.includes('youtube.com') || raw.includes('youtu.be')) return true;
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return true; // Akses remote / Vercel otomatis gunakan YouTube Live stream
+    }
+    return false;
   }, [cctvIpUrl, cctvPublicUrl]);
 
   const youtubeEmbedUrl = React.useMemo(() => {
@@ -245,7 +249,17 @@ export const CctvTab: React.FC<CctvTabProps> = ({
 
             {/* Video Stream Element */}
             <div className="absolute inset-0 z-10 w-full h-full flex items-center justify-center bg-black overflow-hidden rounded-2xl">
-              {cctvStreamSource !== 'custom' ? (
+              {isYouTube ? (
+                <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
+                  <iframe
+                    src={youtubeEmbedUrl}
+                    className="w-full h-full border-0 rounded-2xl bg-black"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    title="Live CCTV Feed - Rig Heat Exchanger"
+                  />
+                </div>
+              ) : cctvStreamSource !== 'custom' ? (
                 <>
                   <video
                     ref={videoRef}
@@ -324,16 +338,6 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                     </div>
                   )}
                 </>
-              ) : isYouTube ? (
-                <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
-                  <iframe
-                    src={youtubeEmbedUrl}
-                    className="w-full h-full border-0 rounded-2xl bg-black"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    title="Live CCTV Feed - Rig Heat Exchanger"
-                  />
-                </div>
               ) : (
                 <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
                   {React.createElement('video-stream', {

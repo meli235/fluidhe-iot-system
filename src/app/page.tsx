@@ -1193,11 +1193,11 @@ export default function FluidHEDashboard() {
   // ─── REAL CCTV & IP CAMERA STATES (EZVIZ C6N FULL INTEGRATION) ───
   const [selectedCamera, setSelectedCamera] = useState<'cam1' | 'cam2' | 'cam3'>('cam1');
   const [cctvRecording, setCctvRecording] = useState<boolean>(true);
-  const [cctvPublicUrl, setCctvPublicUrl] = useState<string>('');
-  const [cctvIpUrl, setCctvIpUrl] = useState<string>('http://localhost:8889/stream.html?src=he_cctv');
-  const [cctvStreamSource, setCctvStreamSource] = useState<'local' | 'custom' | 'demo'>('local');
+  const [cctvPublicUrl, setCctvPublicUrl] = useState<string>('https://www.youtube-nocookie.com/embed/YdcPP8Mby6k?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0');
+  const [cctvIpUrl, setCctvIpUrl] = useState<string>('https://www.youtube-nocookie.com/embed/YdcPP8Mby6k?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0');
+  const [cctvStreamSource, setCctvStreamSource] = useState<'local' | 'custom' | 'demo'>('custom');
   const [isEditingCctvUrl, setIsEditingCctvUrl] = useState<boolean>(false);
-  const [tempCctvUrl, setTempCctvUrl] = useState<string>('http://localhost:8889/stream.html?src=he_cctv');
+  const [tempCctvUrl, setTempCctvUrl] = useState<string>('https://www.youtube-nocookie.com/embed/YdcPP8Mby6k?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0');
 
   // Auto-detect Cloudflare tunnel URL (from API, localStorage, or query params)
   useEffect(() => {
