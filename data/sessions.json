@@ -13,7 +13,7 @@
       "pointsCount": 0,
       "flowMode": "Counter-Current",
       "data": [],
-      "durationSeconds": 270
+      "durationSeconds": 2127
     },
     {
       "id": "SES-20260924-141529",
@@ -42,7 +42,7 @@
       "pointsCount": 0,
       "flowMode": "Counter-Current",
       "data": [],
-      "durationSeconds": 80
+      "durationSeconds": 1943
     },
     {
       "id": "SES-20260924-135945",
@@ -258,7 +258,7 @@
           "mode": "Counter-Current"
         }
       ],
-      "durationSeconds": 1123,
+      "durationSeconds": 2982,
       "endTime": "14.12.46",
       "endTimeMs": 1790233966629
     },
