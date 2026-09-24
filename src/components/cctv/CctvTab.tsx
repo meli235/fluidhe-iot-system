@@ -56,6 +56,8 @@ export const CctvTab: React.FC<CctvTabProps> = ({
   cctvStreamSource,
   setCctvStreamSource,
   cctvIpUrl,
+  cctvPublicUrl,
+  setCctvPublicUrl,
   cctvAudioMuted,
   setCctvAudioMuted,
   audioUserActivated,
@@ -217,28 +219,71 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                     className="w-full h-full object-contain rounded-2xl"
                   />
                   {!webrtcConnected && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-3 bg-black/90 z-20">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-3 bg-black/95 z-20 overflow-y-auto">
                       {webrtcError ? (
-                        <>
-                          <div className="w-14 h-14 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center">
-                            <AlertTriangle className="w-7 h-7" />
+                        <div className="max-w-md w-full flex flex-col items-center space-y-3">
+                          <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center">
+                            <AlertTriangle className="w-6 h-6" />
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-white">Gagal Terhubung ke Kamera</h4>
-                            <p className="text-xs text-zinc-400 max-w-sm mt-1">{webrtcError}</p>
+                            <h4 className="text-sm font-bold text-white">Kamera Belum Terhubung</h4>
+                            <p className="text-xs text-zinc-400 mt-1">
+                              {typeof window !== 'undefined' && window.location.protocol === 'https:' && !cctvPublicUrl
+                                ? 'Anda membuka aplikasi dari Vercel / HTTPS. Diperlukan URL Cloudflare Tunnel agar stream CCTV lab dapat diakses.'
+                                : webrtcError}
+                            </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => connectWebRTC()}
-                            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
-                          >
-                            Coba Sambung Ulang
-                          </button>
-                        </>
+
+                          {/* Cloudflare Tunnel Input Box */}
+                          <div className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl p-3 text-left space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-semibold text-zinc-300">
+                                URL Cloudflare Tunnel (HTTPS)
+                              </label>
+                              <span className="text-[10px] text-sky-400">Dari start-cctv-tunnel.bat</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={cctvPublicUrl || ''}
+                                onChange={(e) => {
+                                  if (setCctvPublicUrl) setCctvPublicUrl(e.target.value);
+                                }}
+                                placeholder="https://xxx.trycloudflare.com"
+                                className="flex-1 bg-black/70 border border-zinc-700 focus:border-sky-500 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (cctvPublicUrl && setCctvPublicUrl) {
+                                    localStorage.setItem('fluidhe_cctv_public_url', cctvPublicUrl.trim().replace(/\/+$/, ''));
+                                  }
+                                  connectWebRTC();
+                                }}
+                                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg transition cursor-pointer whitespace-nowrap"
+                              >
+                                Sambungkan
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-zinc-500">
+                              💡 Jalankan <b>start-cctv-tunnel.bat</b> di PC Lab, lalu salin URL yang berakhiran <i>.trycloudflare.com</i> ke kotak di atas.
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => connectWebRTC()}
+                              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold rounded-xl transition cursor-pointer"
+                            >
+                              Coba Sambung Ulang
+                            </button>
+                          </div>
+                        </div>
                       ) : (
                         <>
-                          <div className="w-14 h-14 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center animate-pulse">
-                            <Video className="w-7 h-7" />
+                          <div className="w-12 h-12 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center animate-pulse">
+                            <Video className="w-6 h-6" />
                           </div>
                           <p className="text-sm font-bold text-white">Menyambungkan ke Kamera via WebRTC...</p>
                           <p className="text-xs text-zinc-500 font-mono">go2rtc &bull; port 8889</p>
