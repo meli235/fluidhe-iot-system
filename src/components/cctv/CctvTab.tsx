@@ -126,40 +126,14 @@ export const CctvTab: React.FC<CctvTabProps> = ({
     return url;
   }, [cctvIpUrl]);
 
-  const isYouTube = React.useMemo(() => {
-    const raw = (cctvIpUrl || cctvPublicUrl || '').toLowerCase();
-    if (raw.includes('youtube.com') || raw.includes('youtu.be')) return true;
-    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return true; // Akses remote / Vercel otomatis gunakan YouTube Live stream
+  const cloudflareEmbedUrl = React.useMemo(() => {
+    let raw = (cctvPublicUrl || cctvIpUrl || '').trim();
+    if (!raw || raw.includes('localhost') || raw.includes('127.0.0.1') || raw.includes('youtube')) {
+      raw = 'https://screenshot-night-assists-baseball.trycloudflare.com';
     }
-    return false;
-  }, [cctvIpUrl, cctvPublicUrl]);
-
-  const youtubeEmbedUrl = React.useMemo(() => {
-    if (!isYouTube) return '';
-    const raw = (cctvIpUrl || cctvPublicUrl || '').trim();
-    if (raw.includes('/embed/')) {
-      const base = raw.split('?')[0];
-      return `${base}?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
-    }
-    let videoId = 'YdcPP8Mby6k';
-    const match = raw.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|video\/))([\w-]{11})/);
-    if (match && match[1]) {
-      videoId = match[1];
-    }
-    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
-  }, [isYouTube, cctvIpUrl, cctvPublicUrl]);
-
-  const videoStreamRef = React.useRef<any>(null);
-
-  React.useEffect(() => {
-    if (videoStreamRef.current && wsRemoteUrl && !isYouTube) {
-      try {
-        videoStreamRef.current.mode = 'mse';
-        videoStreamRef.current.src = wsRemoteUrl;
-      } catch (_) {}
-    }
-  }, [wsRemoteUrl, isYouTube]);
+    if (raw.includes('/stream.html')) return raw;
+    return `${raw.replace(/\/+$/, '')}/stream.html?src=he_cctv&mode=mse`;
+  }, [cctvPublicUrl, cctvIpUrl]);
 
   return (
     <div id="tour-cctv-tab" className="space-y-6">
@@ -167,15 +141,12 @@ export const CctvTab: React.FC<CctvTabProps> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className={`w-2.5 h-2.5 rounded-full ${webrtcConnected || isYouTube || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'bg-sky-500 animate-pulse' : 'bg-slate-400'}`} />
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
               CCTV Live Monitoring — Heat Exchanger Lab
             </h2>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${webrtcConnected || isYouTube || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl))
-                ? 'bg-sky-50 text-sky-700 border-sky-200'
-                : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}>
-              {webrtcConnected || isYouTube || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'STREAM ONLINE' : 'STREAM OFFLINE'}
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
+              STREAM ONLINE (REAL-TIME)
             </span>
             <button
               type="button"
@@ -249,105 +220,13 @@ export const CctvTab: React.FC<CctvTabProps> = ({
 
             {/* Video Stream Element */}
             <div className="absolute inset-0 z-10 w-full h-full flex items-center justify-center bg-black overflow-hidden rounded-2xl">
-              {isYouTube ? (
-                <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
-                  <iframe
-                    src={youtubeEmbedUrl}
-                    className="w-full h-full border-0 rounded-2xl bg-black"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    title="Live CCTV Feed - Rig Heat Exchanger"
-                  />
-                </div>
-              ) : cctvStreamSource !== 'custom' ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted={cctvAudioMuted}
-                    className="w-full h-full object-contain rounded-2xl"
-                    onLoadedMetadata={() => {
-                      if (videoRef.current) {
-                        videoRef.current.play().catch(() => {});
-                      }
-                    }}
-                  />
-
-                  {/* Corner Unmute Badge */}
-                  {webrtcConnected && cctvAudioMuted && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCctvAudioMuted(false);
-                        setAudioUserActivated(true);
-                        if (videoRef.current) {
-                          videoRef.current.muted = false;
-                          videoRef.current.volume = (cctvVolume || 100) / 100;
-                          videoRef.current.play().catch(() => {});
-                        }
-                        triggerCctvToast('Audio CCTV aktif', 'info');
-                      }}
-                      className="absolute top-4 right-4 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/15 rounded-full text-white text-xs font-semibold shadow-lg transition cursor-pointer"
-                    >
-                      <VolumeX className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Audio Dibisukan &bull; Klik untuk Suara</span>
-                    </button>
-                  )}
-
-                  {/* Friendly Standby / Connecting State */}
-                  {!webrtcConnected && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-4 bg-zinc-950/90 backdrop-blur-sm z-20">
-                      <div className="relative flex items-center justify-center">
-                        <div className="w-16 h-16 rounded-2xl bg-sky-500/10 text-sky-400 flex items-center justify-center border border-sky-500/20 shadow-lg">
-                          <Video className="w-8 h-8" />
-                        </div>
-                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
-                        </span>
-                      </div>
-                      
-                      <div className="space-y-1.5 max-w-sm">
-                        <h4 className="text-sm font-bold text-white tracking-wide">
-                          Menghubungkan Kamera Laboratorium
-                        </h4>
-                        <p className="text-xs text-zinc-400 leading-relaxed">
-                          Memuat transmisi siaran langsung CCTV secara otomatis...
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2.5 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => connectWebRTC()}
-                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5 border border-zinc-700 shadow-sm"
-                        >
-                          <RotateCw className="w-3.5 h-3.5" />
-                          <span>Muat Ulang Kamera</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsWifiModalOpen(true)}
-                          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-sky-600/20"
-                        >
-                          <Wifi className="w-3.5 h-3.5" />
-                          <span>Pengaturan Wi-Fi</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
-                  {React.createElement('video-stream', {
-                    ref: videoStreamRef,
-                    mode: 'mse',
-                    src: wsRemoteUrl,
-                    style: { width: '100%', height: '100%', display: 'block' }
-                  })}
-                </div>
-              )}
+              <iframe
+                src={cloudflareEmbedUrl}
+                className="w-full h-full border-0 rounded-2xl bg-black"
+                allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *"
+                allowFullScreen
+                title="Live CCTV Feed - Rig Heat Exchanger"
+              />
             </div>
 
             {/* Bottom Status & Snapshot Bar */}

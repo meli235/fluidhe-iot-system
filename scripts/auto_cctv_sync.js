@@ -82,6 +82,37 @@ proc.on('close', (code) => {
   console.log(`[INFO] Cloudflare process exited with code ${code}`);
 });
 
+// 3. Listener Perintah PTZ dari Remote / Vercel (Cloud D-Pad Bridge)
+let lastProcessedPtzTime = Date.now();
+const ptzScriptPath = path.join(__dirname, 'ezviz_ptz_service.py');
+
+setInterval(async () => {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/telemetry_data?warning_status=like.PTZ_CMD:*&order=id.desc&limit=1`, {
+      headers: {
+        'apikey': SERVICE_KEY,
+        'Authorization': `Bearer ${SERVICE_KEY}`
+      }
+    });
+    const rows = await res.json();
+    if (Array.isArray(rows) && rows.length > 0 && typeof rows[0]?.warning_status === 'string') {
+      const parts = rows[0].warning_status.split(':');
+      if (parts.length >= 4) {
+        const direction = parts[1];
+        const duration = parts[2] || '0.55';
+        const timestamp = parseInt(parts[3], 10);
+        if (timestamp > lastProcessedPtzTime) {
+          lastProcessedPtzTime = timestamp;
+          console.log(`[PTZ REMOTE] Menjalankan perintah rotasi kamera dari Vercel: ${direction} (${duration}s)...`);
+          spawn('python', [ptzScriptPath, 'move', direction, duration], {
+            stdio: 'inherit'
+          });
+        }
+      }
+    }
+  } catch (_) {}
+}, 500);
+
 process.on('SIGINT', () => {
   proc.kill();
   process.exit(0);
