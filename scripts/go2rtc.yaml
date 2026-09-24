@@ -12,12 +12,7 @@ webrtc:
 
 streams:
   he_cctv:
-    - "rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101#backchannel=0"
-    - "rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101#backchannel=0"
-    - "ffmpeg:rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101#video=copy#audio=opus#raw=-fflags nobuffer -flags low_delay -analyzeduration 50000 -probesize 50000"
-    - "ffmpeg:rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101#video=copy#audio=opus#raw=-fflags nobuffer -flags low_delay -analyzeduration 50000 -probesize 50000"
-    - "ffmpeg:rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101#video=copy#audio=pcmu"
-    - "ffmpeg:rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101#video=copy#audio=pcmu"
+    - "rtsp://admin:Eva1Yosep2@192.168.1.10:554/Streaming/Channels/101"
 
 ffmpeg:
   bin: "C:\\Users\\mrwin\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Essentials_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-essentials_build\\bin\\ffmpeg.exe"

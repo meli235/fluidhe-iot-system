@@ -296,7 +296,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                 <iframe
                   src={cctvIpUrl}
                   className="w-full h-full border-0 rounded-2xl bg-black"
-                  allow="autoplay; encrypted-media; picture-in-picture; camera; microphone"
+                  allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *"
                   allowFullScreen
                   title="Live CCTV Feed"
                 />
