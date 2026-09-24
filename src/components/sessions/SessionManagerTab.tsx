@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import {
   FolderKanban,
@@ -29,6 +29,7 @@ export interface SessionManagerTabProps {
   onSelectSessionForLogs: (sessionId: string) => void;
   onExportMasterExcel?: () => void;
   onExportSessionExcel?: (session: SystemSession) => void;
+  onClearActiveSession?: () => void;
 }
 
 export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
@@ -37,7 +38,8 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
   onRefreshSessions,
   onSelectSessionForLogs,
   onExportMasterExcel,
-  onExportSessionExcel
+  onExportSessionExcel,
+  onClearActiveSession
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSession, setEditingSession] = useState<SystemSession | null>(null);
@@ -64,7 +66,26 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  const allSessions = currentSession ? [currentSession, ...archivedSessions] : archivedSessions;
+  // Deduplikasi sesi secara ketat berdasarkan ID: jika sesi aktif sudah tersimpan di arsip, jangan tampilkan ganda
+  const allSessions = useMemo(() => {
+    const sessionMap = new Map<string, SystemSession>();
+    // Taruh arsip terlebih dahulu
+    archivedSessions.forEach((s) => {
+      if (s?.id) sessionMap.set(s.id, s);
+    });
+    // Jika ada currentSession, merge dan utamakan yang memiliki data points terlengkap/terbaru
+    if (currentSession?.id) {
+      const existing = sessionMap.get(currentSession.id);
+      if (!existing || (currentSession.data && currentSession.data.length >= (existing.data?.length || 0))) {
+        sessionMap.set(currentSession.id, { ...(existing || {}), ...currentSession });
+      }
+    }
+    return Array.from(sessionMap.values()).sort((a, b) => {
+      const timeA = a.startTimeMs || (a.date ? new Date(a.date).getTime() : 0);
+      const timeB = b.startTimeMs || (b.date ? new Date(b.date).getTime() : 0);
+      return timeB - timeA;
+    });
+  }, [currentSession, archivedSessions]);
 
   const filteredSessions = allSessions.filter((s) => {
     const q = searchQuery.toLowerCase().trim();
@@ -79,8 +100,8 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
     );
   });
 
-  // Sesi yang bisa dipilih (sesi aktif tidak bisa dihapus saat sedang berjalan)
-  const selectableSessions = filteredSessions.filter((s) => s.id !== currentSession?.id);
+  // Sesi yang bisa dipilih (Admin dapat memilih semua sesi termasuk sesi aktif untuk dihapus)
+  const selectableSessions = filteredSessions;
   const isAllSelected =
     selectableSessions.length > 0 && selectableSessions.every((s) => selectedSessionIds.includes(s.id));
   const isIndeterminate = selectedSessionIds.length > 0 && !isAllSelected;
@@ -144,12 +165,19 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
     if (!sessionToDelete) return;
     try {
       setIsDeleting(true);
+      const isTargetCurrent = sessionToDelete.id === currentSession?.id;
+
       const res = await fetch(`/api/sessions?sessionId=${encodeURIComponent(sessionToDelete.id)}&role=admin`, {
         method: 'DELETE'
       });
       const data = await res.json();
+
+      if (isTargetCurrent) {
+        onClearActiveSession?.();
+      }
+
       if (data.success) {
-        showToast(`Sesi ${sessionToDelete.id} berhasil dihapus permanen!`, 'success');
+        showToast(data.message || `Sesi ${sessionToDelete.id} & seluruh data sensornya berhasil dihapus secara permanen!`, 'success');
         setSelectedSessionIds((prev) => prev.filter((id) => id !== sessionToDelete.id));
         setSessionToDelete(null);
         onRefreshSessions();
@@ -167,6 +195,8 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
     if (selectedSessionIds.length === 0) return;
     try {
       setIsBulkDeleting(true);
+      const includesCurrent = currentSession && selectedSessionIds.includes(currentSession.id);
+
       const res = await fetch('/api/sessions', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -176,6 +206,11 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
         })
       });
       const data = await res.json();
+
+      if (includesCurrent) {
+        onClearActiveSession?.();
+      }
+
       if (data.success) {
         showToast(data.message || `Berhasil menghapus ${selectedSessionIds.length} sesi praktikum!`, 'success');
         setSelectedSessionIds([]);
@@ -382,20 +417,13 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
                     >
                       {/* Checkbox Kolom */}
                       <td className="py-3 px-3 text-center">
-                        {!isCurrent ? (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleSelectRow(session.id)}
-                            className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer accent-sky-600 align-middle"
-                            title={`Pilih ${session.id}`}
-                          />
-                        ) : (
-                          <span
-                            title="Sesi aktif yang sedang berjalan tidak dapat dipilih untuk dihapus"
-                            className="inline-block w-4 h-4 bg-slate-100 rounded border border-slate-200 cursor-not-allowed opacity-40 align-middle"
-                          />
-                        )}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectRow(session.id)}
+                          className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer accent-sky-600 align-middle"
+                          title={`Pilih ${session.id}${isCurrent ? ' (Sesi Aktif)' : ''}`}
+                        />
                       </td>
 
                       {/* ID Sesi */}
@@ -468,17 +496,15 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
                             <ExternalLink className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Delete Button (hanya arsip yang sudah selesai) */}
-                          {!isCurrent && (
-                            <button
-                              type="button"
-                              onClick={() => setSessionToDelete(session)}
-                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition active:scale-95 cursor-pointer"
-                              title="Hapus sesi ini secara permanen"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          {/* Delete Button (Tersedia untuk semua sesi bagi Admin) */}
+                          <button
+                            type="button"
+                            onClick={() => setSessionToDelete(session)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition active:scale-95 cursor-pointer"
+                            title={isCurrent ? "Hentikan & Hapus sesi aktif ini secara permanen" : "Hapus sesi ini secara permanen"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -592,8 +618,14 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900">Hapus Sesi Praktikum?</h3>
-                <p className="text-xs text-slate-500">Tindakan ini akan menghapus data permanen.</p>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  {sessionToDelete.id === currentSession?.id ? 'Hentikan & Hapus Sesi Aktif?' : 'Hapus Sesi Praktikum?'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {sessionToDelete.id === currentSession?.id 
+                    ? 'Sesi ini sedang aktif berjalan. Menghapus sesi ini akan menghentikan perekaman mesin dan menghapus seluruh datanya secara permanen.' 
+                    : 'Tindakan ini akan menghapus data permanen.'}
+                </p>
               </div>
             </div>
 
@@ -602,6 +634,11 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
               <p className="text-slate-500">{sessionToDelete.title || 'Praktikum'}</p>
               <p className="text-slate-500">Operator: {sessionToDelete.operatorName}</p>
               <p className="text-slate-500">Tanggal: {sessionToDelete.date}</p>
+            </div>
+
+            <div className="p-2.5 bg-rose-50 border border-rose-200/80 rounded-xl flex items-start gap-2 text-[11px] text-rose-800 leading-snug">
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1" />
+              <span>Seluruh rekaman data sensor untuk sesi ini akan dihapus secara <strong>permanen</strong>.</span>
             </div>
 
             <div className="pt-1 flex items-center justify-end gap-2">
@@ -655,6 +692,11 @@ export const SessionManagerTab: React.FC<SessionManagerTabProps> = ({
                   </div>
                 );
               })}
+            </div>
+
+            <div className="p-2.5 bg-rose-50 border border-rose-200/80 rounded-xl flex items-start gap-2 text-[11px] text-rose-800 leading-snug">
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1" />
+              <span>Seluruh rekaman data sensor untuk {selectedSessionIds.length} sesi terpilih ini akan dihapus secara <strong>permanen</strong>.</span>
             </div>
 
             <div className="pt-1 flex items-center justify-end gap-2">

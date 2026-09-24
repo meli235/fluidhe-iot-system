@@ -111,7 +111,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
   // Practical Session Duration View Mode (Default: '60m' / 1 Jam)
   const [durationMode, setDurationMode] = useState<DurationMode>('60m');
   const [isTimeConfigOpen, setIsTimeConfigOpen] = useState<boolean>(false);
-  const [userSelectedStart, setUserSelectedStart] = useState<string | null>(null);
+  const [userSelectedEnd, setUserSelectedEnd] = useState<string | null>(null);
 
   // Real-time ticking clock for synchronized UI and indicators
   const [now, setNow] = useState<Date>(() => new Date());
@@ -122,6 +122,11 @@ export const LiveChart: React.FC<LiveChartProps> = ({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Real-Time Current Time in seconds since midnight (0 - 86399)
+  const currentTimeSec = useMemo(() => {
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  }, [now]);
 
   // Sort raw history chronologically to prevent backward jumps & filter out yesterday's stale records
   const sortedHistory = useMemo(() => {
@@ -164,17 +169,6 @@ export const LiveChart: React.FC<LiveChartProps> = ({
     });
   }, [telemetryHistory]);
 
-  // Current real-time clock hour string (e.g. "15:00" when now is 15:37)
-  const currentRealTimeHourStr = useMemo(() => {
-    return `${String(now.getHours()).padStart(2, '0')}:00`;
-  }, [now]);
-
-  // Effective Start Time for the Chart (defaults to current real-time hour)
-  const activeStartTime = useMemo(() => {
-    if (userSelectedStart) return userSelectedStart;
-    return currentRealTimeHourStr;
-  }, [userSelectedStart, currentRealTimeHourStr]);
-
   // SVG Dimension Constants
   const width = 880;
   const height = 250;
@@ -198,11 +192,11 @@ export const LiveChart: React.FC<LiveChartProps> = ({
     return baselineY - ratio * plotHeight;
   };
 
-  // Calculate Time Window (Start Seconds & Duration Seconds)
+  // Calculate Time Window:
+  // Default is Real-Time / Live (End time = NOW, Start time = NOW - duration, rolling backwards)
+  // Or if user selected a historical end time: End time = userSelectedEnd, Start time = End time - duration
   const timeWindow = useMemo(() => {
-    let startSec = parseTimeToSeconds(activeStartTime) ?? 14 * 3600;
     let durationSec = 3600; // Default 1 hour
-
     if (durationMode === '15m') {
       durationSec = 15 * 60;
     } else if (durationMode === '30m') {
@@ -213,16 +207,43 @@ export const LiveChart: React.FC<LiveChartProps> = ({
       durationSec = 120 * 60;
     }
 
-    const endSec = startSec + durationSec;
+    let endSec: number;
+    let isLive = false;
+
+    if (userSelectedEnd) {
+      endSec = parseTimeToSeconds(userSelectedEnd) ?? currentTimeSec;
+    } else {
+      isLive = true;
+      endSec = currentTimeSec;
+
+      // Safeguard: If latest telemetry point is slightly ahead of client clock by up to 5 minutes,
+      // snap endSec to the latest point so it is never cut off
+      if (sortedHistory.length > 0) {
+        const latestPt = sortedHistory[sortedHistory.length - 1];
+        const latestSec = parseTimeToSeconds(latestPt.timestamp);
+        if (latestSec !== null) {
+          let diff = latestSec - endSec;
+          if (diff > 43200) diff -= 86400;
+          if (diff < -43200) diff += 86400;
+          if (diff > 0 && diff <= 300) {
+            endSec = latestSec;
+          }
+        }
+      }
+    }
+
+    const startSec = (endSec - durationSec + 86400) % 86400;
+
     return {
       startSec,
       endSec,
       durationSec,
+      isLive,
       startTimeStr: formatSecondsToTime(startSec),
       endTimeStr: formatSecondsToTime(endSec),
       durationMin: Math.round(durationSec / 60)
     };
-  }, [durationMode, activeStartTime]);
+  }, [durationMode, userSelectedEnd, currentTimeSec, sortedHistory]);
 
   // Map Telemetry Points to X Coordinates based on Time Window or Point Index
   const { filteredPoints, timeTicks } = useMemo(() => {
@@ -244,43 +265,60 @@ export const LiveChart: React.FC<LiveChartProps> = ({
     }
 
     // Fixed Duration Mode (e.g. 1 Jam / 30m / 15m / 2 Jam)
-    const { startSec, durationSec } = timeWindow;
+    // End time is rightmost (now), window extends backwards by durationSec
+    const { endSec, durationSec } = timeWindow;
 
     const pointsWithTime = sortedHistory
       .map((d, idx) => {
-        const sec = parseTimeToSeconds(d.timestamp);
+        let sec: number | null = null;
+        if (d.created_at) {
+          const dt = new Date(d.created_at);
+          if (!isNaN(dt.getTime())) {
+            sec = dt.getHours() * 3600 + dt.getMinutes() * 60 + dt.getSeconds();
+          }
+        }
+        if (sec === null) {
+          sec = parseTimeToSeconds(d.timestamp);
+        }
         return { ...d, sec, originalIndex: idx };
       })
       .filter((d): d is typeof d & { sec: number } => d.sec !== null);
 
     const mapped = pointsWithTime
+      .map((d) => {
+        let diffFromEnd = d.sec - endSec;
+        if (diffFromEnd > 43200) diffFromEnd -= 86400; // Handle midnight wrap
+        if (diffFromEnd < -43200) diffFromEnd += 86400;
+
+        return {
+          ...d,
+          diffFromEnd
+        };
+      })
       .filter((d) => {
-        let relSec = d.sec - startSec;
-        if (relSec < -43200) relSec += 86400; // Handle midnight wrap
-        if (relSec > 43200) relSec -= 86400;
-        return relSec >= 0 && relSec <= durationSec;
+        // Point is inside window if it is within durationSec in the past up to endSec (+5s tolerance for clock jitter)
+        return d.diffFromEnd <= 5 && d.diffFromEnd >= -durationSec;
       })
       .map((d) => {
-        let relSec = d.sec - startSec;
-        if (relSec < -43200) relSec += 86400;
-        if (relSec > 43200) relSec -= 86400;
-
-        const ratio = Math.max(0, Math.min(1, relSec / durationSec));
+        // ratio goes from 0 (at start: endSec - durationSec) to 1 (at end: endSec)
+        const ratio = Math.max(0, Math.min(1, (d.diffFromEnd + durationSec) / durationSec));
         const plotX = padLeft + ratio * plotWidth;
         return {
           ...d,
           plotX,
-          relSec,
+          relSec: d.diffFromEnd + durationSec,
           isInsideWindow: true
         };
       });
 
-    // Generate 7 evenly spaced time tick marks across the duration (e.g. 10:00, 10:10, 10:20... 11:00)
-    const numTicks = 6;
+    // Generate evenly spaced time tick marks across the duration (e.g. 10:17 ... 11:17)
+    const numTicks = durationMode === '15m' ? 5 : 6;
     const ticks = [];
     for (let i = 0; i <= numTicks; i++) {
-      const tickSec = startSec + (i / numTicks) * durationSec;
-      const x = padLeft + (i / numTicks) * plotWidth;
+      const ratio = i / numTicks;
+      let tickSec = endSec - durationSec + ratio * durationSec;
+      tickSec = ((tickSec % 86400) + 86400) % 86400;
+      const x = padLeft + ratio * plotWidth;
       ticks.push({
         x,
         label: formatSecondsToTime(tickSec)
@@ -321,17 +359,13 @@ export const LiveChart: React.FC<LiveChartProps> = ({
 
   const hoveredPoint = hoverIndex !== null && hoverIndex >= 0 && hoverIndex < filteredPoints.length ? filteredPoints[hoverIndex] : null;
 
-  // Real-Time Current Time Indicator inside session
-  const currentTimeSec = useMemo(() => {
-    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-  }, [now]);
-
   const currentTimeMarkerX = useMemo(() => {
-    if (durationMode === 'live') return null;
-    let relSec = currentTimeSec - timeWindow.startSec;
-    if (relSec < -43200) relSec += 86400;
-    if (relSec >= 0 && relSec <= timeWindow.durationSec) {
-      const ratio = relSec / timeWindow.durationSec;
+    if (durationMode === 'live' || timeWindow.isLive) return null;
+    let diffFromEnd = currentTimeSec - timeWindow.endSec;
+    if (diffFromEnd > 43200) diffFromEnd -= 86400;
+    if (diffFromEnd < -43200) diffFromEnd += 86400;
+    if (diffFromEnd <= 0 && diffFromEnd >= -timeWindow.durationSec) {
+      const ratio = (diffFromEnd + timeWindow.durationSec) / timeWindow.durationSec;
       return padLeft + ratio * plotWidth;
     }
     return null;
@@ -354,7 +388,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               <span>
                 {durationMode === 'live'
                   ? 'Mode: Live Rolling'
-                  : `Sesi: ${timeWindow.startTimeStr} - ${timeWindow.endTimeStr} WIB (${timeWindow.durationMin} Menit)`}
+                  : `Rentang: ${timeWindow.startTimeStr} - ${timeWindow.endTimeStr} WIB (${timeWindow.durationMin} Menit)`}
               </span>
             </span>
           </div>
@@ -371,7 +405,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               type="button"
               onClick={() => {
                 setDurationMode('15m');
-                setUserSelectedStart(null);
+                setUserSelectedEnd(null);
               }}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '15m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
                 }`}
@@ -382,7 +416,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               type="button"
               onClick={() => {
                 setDurationMode('30m');
-                setUserSelectedStart(null);
+                setUserSelectedEnd(null);
               }}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '30m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
                 }`}
@@ -393,7 +427,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               type="button"
               onClick={() => {
                 setDurationMode('60m');
-                setUserSelectedStart(null);
+                setUserSelectedEnd(null);
               }}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '60m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
                 }`}
@@ -404,7 +438,7 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               type="button"
               onClick={() => {
                 setDurationMode('120m');
-                setUserSelectedStart(null);
+                setUserSelectedEnd(null);
               }}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === '120m' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
                 }`}
@@ -413,7 +447,10 @@ export const LiveChart: React.FC<LiveChartProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setDurationMode('live')}
+              onClick={() => {
+                setDurationMode('live');
+                setUserSelectedEnd(null);
+              }}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${durationMode === 'live' ? 'bg-white text-sky-700 shadow-xs font-extrabold' : 'hover:text-slate-900'
                 }`}
             >
@@ -428,10 +465,10 @@ export const LiveChart: React.FC<LiveChartProps> = ({
                 type="button"
                 onClick={() => setIsTimeConfigOpen(!isTimeConfigOpen)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
-                title="Atur Jam Mulai Praktikum"
+                title="Atur Waktu Acuan Grafik"
               >
                 <Sliders className="w-3.5 h-3.5 text-sky-600" />
-                <span>Mulai: {activeStartTime}</span>
+                <span>{timeWindow.isLive ? 'Waktu: Saat Ini' : `Sampai: ${timeWindow.endTimeStr}`}</span>
                 <ChevronDown className="w-3 h-3 text-slate-400" />
               </button>
 
@@ -439,8 +476,8 @@ export const LiveChart: React.FC<LiveChartProps> = ({
               {isTimeConfigOpen && (
                 <div className="absolute right-0 mt-1.5 w-68 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 z-30 space-y-2.5 text-xs animate-in fade-in zoom-in-95">
                   <div className="font-bold text-slate-800 flex items-center justify-between border-b border-slate-100 pb-1.5">
-                    <span>Pilih Jam Mulai:</span>
-                    <span className="text-[10px] text-sky-600 font-semibold">{timeWindow.durationMin} Menit Sesi</span>
+                    <span>Acuan Waktu Akhir:</span>
+                    <span className="text-[10px] text-sky-600 font-semibold">{timeWindow.durationMin} Menit Mundur</span>
                   </div>
 
                   {/* Dynamic Time Quick-Select Option */}
@@ -448,35 +485,43 @@ export const LiveChart: React.FC<LiveChartProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setUserSelectedStart(currentRealTimeHourStr);
+                        setUserSelectedEnd(null);
                         setIsTimeConfigOpen(false);
                       }}
-                      className="w-full px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl font-bold text-left flex items-center justify-between transition cursor-pointer"
+                      className={`w-full px-2.5 py-1.5 border rounded-xl font-bold text-left flex items-center justify-between transition cursor-pointer ${
+                        timeWindow.isLive
+                          ? 'bg-sky-50 text-sky-800 border-sky-300 ring-1 ring-sky-200'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
                     >
                       <span className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-sky-600" /> Jam Saat Ini / Live
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Waktu Saat Ini (Live)
                       </span>
-                      <span className="font-mono">{currentRealTimeHourStr}</span>
+                      <span className="font-mono text-[11px] text-slate-500">{formatSecondsToTime(currentTimeSec)}</span>
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1 pt-1">
-                    {['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'].map((time) => (
-                      <button
-                        key={time}
-                        type="button"
-                        onClick={() => {
-                          setUserSelectedStart(time);
-                          setIsTimeConfigOpen(false);
-                        }}
-                        className={`px-1.5 py-1 rounded-lg text-center font-bold text-[11px] transition cursor-pointer ${activeStartTime === time
-                          ? 'bg-sky-600 text-white shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
-                          }`}
-                      >
-                        {time}
-                      </button>
-                    ))}
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold text-slate-400">Atau lihat arsip hingga jam:</p>
+                    <div className="grid grid-cols-4 gap-1 pt-0.5">
+                      {['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'].map((time) => (
+                        <button
+                          key={time}
+                          type="button"
+                          onClick={() => {
+                            setUserSelectedEnd(time);
+                            setIsTimeConfigOpen(false);
+                          }}
+                          className={`px-1.5 py-1 rounded-lg text-center font-bold text-[11px] transition cursor-pointer ${
+                            !timeWindow.isLive && userSelectedEnd === time
+                              ? 'bg-sky-600 text-white shadow-xs'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}
+                        >
+                          {time}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

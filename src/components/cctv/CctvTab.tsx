@@ -168,11 +168,6 @@ export const CctvTab: React.FC<CctvTabProps> = ({
               </div>
 
               <div className="flex items-center gap-2 pointer-events-auto">
-                {cctvStreamSource === 'demo' && (
-                  <div className="bg-sky-600/90 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide">
-                    SIMULATED FEED
-                  </div>
-                )}
                 {isManualRecording && (
                   <div className="flex items-center gap-1.5 bg-red-600/90 text-white px-2.5 py-0.5 rounded-full text-[11px] font-bold animate-pulse">
                     <Disc className="w-3 h-3 animate-spin" />
@@ -195,29 +190,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
 
             {/* Video Stream Element */}
             <div className="absolute inset-0 z-10 w-full h-full flex items-center justify-center bg-black overflow-hidden rounded-2xl">
-              {cctvStreamSource === 'demo' ? (
-                <div className="flex flex-col items-center justify-center text-center p-6 space-y-3">
-                  <div className="w-14 h-14 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center animate-pulse">
-                    <Video className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Mode Simulasi Video CCTV Aktif</h4>
-                    <p className="text-xs text-zinc-400 max-w-sm mt-1">
-                      Server streaming RTSP (<code className="text-sky-300 font-mono">go2rtc</code> port 8889) belum aktif di komputer host.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCctvStreamSource('local');
-                      triggerCctvToast('Mencoba menyambung via WebRTC ke go2rtc...', 'info');
-                    }}
-                    className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl border border-zinc-700 transition cursor-pointer"
-                  >
-                    Sambung Ulang ke go2rtc (Port 8889)
-                  </button>
-                </div>
-              ) : cctvStreamSource === 'local' ? (
+              {cctvStreamSource !== 'custom' ? (
                 <>
                   {!cctvAudioMuted && !audioUserActivated && (
                     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 rounded-2xl">
@@ -257,16 +230,9 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                           <button
                             type="button"
                             onClick={() => connectWebRTC()}
-                            className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
+                            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
                           >
                             Coba Sambung Ulang
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setCctvStreamSource('demo'); triggerCctvToast('Beralih ke Mode Simulasi', 'info'); }}
-                            className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg border border-zinc-700 transition cursor-pointer"
-                          >
-                            Beralih ke Simulasi Feed
                           </button>
                         </>
                       ) : (

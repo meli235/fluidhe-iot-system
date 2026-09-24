@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const sessionId = searchParams.get('sessionId');
 
     const db = readSessionsDatabase();
-    
+
     // Sinkronkan nama pengguna secara dinamis dari master users.json
     const usersFilePath = path.join(DATA_DIR, 'users.json');
     const userMap = new Map<string, string>();
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
           });
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const allSessions = db.sessions.map((s) => {
       const emailKey = s.operatorEmail?.toLowerCase().trim();
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
         const emailKey = s.operatorEmail?.toLowerCase().trim();
         const currentName = (emailKey && userMap.has(emailKey)) ? userMap.get(emailKey)! : s.operatorName;
         const key = emailKey || currentName.toLowerCase();
-        
+
         if (!classMap.has(key)) {
           classMap.set(key, {
             operatorEmail: s.operatorEmail || '',
@@ -285,7 +285,7 @@ export async function DELETE(req: NextRequest) {
           sessionIds = body.sessionIds;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     if (sessionIdsParam) {
       sessionIds = sessionIdsParam.split(',').map((id) => id.trim()).filter(Boolean);
@@ -338,7 +338,7 @@ export async function DELETE(req: NextRequest) {
     writeSessionsDatabase(db);
     return NextResponse.json({
       success: true,
-      message: deletedCount === 1 
+      message: deletedCount === 1
         ? `Sesi ${sessionIds[0]} berhasil dihapus`
         : `Berhasil menghapus ${deletedCount} sesi praktikum`,
       deletedCount

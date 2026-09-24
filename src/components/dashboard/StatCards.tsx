@@ -9,12 +9,14 @@ interface StatCardsProps {
   supabaseTelemetry: TelemetryRow | null;
   latestData: TelemetryPoint;
   dualHeaterState?: Partial<DualHeaterState>;
+  isHardwareOnline?: boolean;
 }
 
 export const StatCards: React.FC<StatCardsProps> = ({
   tempLabels,
   supabaseTelemetry,
   latestData,
+  isHardwareOnline = false,
 }) => {
   const t1 = supabaseTelemetry ? supabaseTelemetry.temp_1 : latestData.ti1;
   const t2 = supabaseTelemetry ? supabaseTelemetry.temp_2 : latestData.ti2;
@@ -40,6 +42,9 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-sky-600" /> Suhu & Debit Aliran Real-Time
           </h3>
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${isHardwareOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+            {isHardwareOnline ? 'Online' : 'Menunggu Alat'}
+          </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-xs">
@@ -47,7 +52,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t1}</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {t1.toFixed(1)} °C
+              {isHardwareOnline ? `${t1.toFixed(1)} °C` : '--'}
             </strong>
           </div>
 
@@ -55,7 +60,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t2}</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {t2.toFixed(1)} °C
+              {isHardwareOnline ? `${t2.toFixed(1)} °C` : '--'}
             </strong>
           </div>
 
@@ -63,7 +68,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t3}</span>
             <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
-              {t3.toFixed(1)} °C
+              {isHardwareOnline ? `${t3.toFixed(1)} °C` : '--'}
             </strong>
           </div>
 
@@ -71,7 +76,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t4}</span>
             <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
-              {t4.toFixed(1)} °C
+              {isHardwareOnline ? `${t4.toFixed(1)} °C` : '--'}
             </strong>
           </div>
 
@@ -82,7 +87,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
               <span>Debit Panas (FC1)</span>
             </div>
             <strong className="text-amber-900 font-extrabold text-sm sm:text-base">
-              {fc1.toFixed(2)} L/m
+              {isHardwareOnline ? `${fc1.toFixed(2)} L/m` : '--'}
             </strong>
           </div>
 
@@ -93,7 +98,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
               <span>Debit Dingin (FC2)</span>
             </div>
             <strong className="text-sky-900 font-extrabold text-sm sm:text-base">
-              {fc2.toFixed(2)} L/m
+              {isHardwareOnline ? `${fc2.toFixed(2)} L/m` : '--'}
             </strong>
           </div>
         </div>
@@ -105,6 +110,9 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
             <Gauge className="w-4 h-4 text-emerald-600" /> Tekanan Fluida & Delta Tekanan (ΔP)
           </h3>
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${isHardwareOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+            {isHardwareOnline ? 'Online' : 'Menunggu Alat'}
+          </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-xs">
@@ -112,7 +120,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI1 (Inlet Panas)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {pi1.toFixed(2)} Bar
+              {isHardwareOnline ? `${pi1.toFixed(2)} Bar` : '--'}
             </strong>
           </div>
 
@@ -120,7 +128,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI2 (Outlet Panas)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {pi2.toFixed(2)} Bar
+              {isHardwareOnline ? `${pi2.toFixed(2)} Bar` : '--'}
             </strong>
           </div>
 
@@ -128,7 +136,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 shadow-2xs hover:border-emerald-300 transition-all">
             <span className="text-[10px] text-emerald-800 font-bold block truncate">ΔP1 (P1 – P2 Panas)</span>
             <strong className="text-emerald-700 font-black text-sm sm:text-base">
-              {deltaP1 >= 0 ? `+${deltaP1.toFixed(2)}` : deltaP1.toFixed(2)} Bar
+              {isHardwareOnline ? (deltaP1 >= 0 ? `+${deltaP1.toFixed(2)} Bar` : `${deltaP1.toFixed(2)} Bar`) : '--'}
             </strong>
           </div>
 
@@ -136,7 +144,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI3 (Inlet Dingin)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {pi3.toFixed(2)} Bar
+              {isHardwareOnline ? `${pi3.toFixed(2)} Bar` : '--'}
             </strong>
           </div>
 
@@ -144,7 +152,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI4 (Outlet Dingin)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {pi4.toFixed(2)} Bar
+              {isHardwareOnline ? `${pi4.toFixed(2)} Bar` : '--'}
             </strong>
           </div>
 
@@ -152,7 +160,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-teal-50/70 rounded-2xl border border-teal-200 shadow-2xs hover:border-teal-300 transition-all">
             <span className="text-[10px] text-teal-800 font-bold block truncate">ΔP2 (P3 – P4 Dingin)</span>
             <strong className="text-teal-700 font-black text-sm sm:text-base">
-              {deltaP2 >= 0 ? `+${deltaP2.toFixed(2)}` : deltaP2.toFixed(2)} Bar
+              {isHardwareOnline ? (deltaP2 >= 0 ? `+${deltaP2.toFixed(2)} Bar` : `${deltaP2.toFixed(2)} Bar`) : '--'}
             </strong>
           </div>
         </div>

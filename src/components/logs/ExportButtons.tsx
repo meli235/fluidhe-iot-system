@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FileText, FileSpreadsheet, Database, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Database, Loader2 } from 'lucide-react';
 
 export interface ExportButtonsProps {
   isUploading?: boolean;
@@ -9,7 +9,6 @@ export interface ExportButtonsProps {
   onExportMasterExcel?: () => void;
   onExportAndUpload?: () => void;
   onCloudDriveAccess?: () => void;
-  onExportPDFReport: () => void;
   isAdmin?: boolean;
 }
 
@@ -17,7 +16,6 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
   isUploading,
   onExportExcel,
   onExportMasterExcel,
-  onExportPDFReport,
   isAdmin = false
 }) => {
   return (
@@ -50,17 +48,8 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
           <span>Master Excel (Semua Kelas)</span>
         </button>
       )}
-
-      <button
-        type="button"
-        onClick={onExportPDFReport}
-        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-      >
-        <FileText className="w-3.5 h-3.5" />
-        <span>Cetak / PDF Laporan</span>
-      </button>
     </div>
   );
 };
-export default ExportButtons;
 
+export default ExportButtons;

@@ -35,8 +35,8 @@ interface StepItem {
 const STARTUP_STEPS: StepItem[] = [
   {
     id: 1,
-    label: 'Handshake Cloud IoT & ESP32',
-    detail: 'Menghubungkan saluran komunikasi data mikrokontroler Heat Exchanger.',
+    label: 'Koneksi Cloud & Alat Laboratorium',
+    detail: 'Menghubungkan saluran komunikasi data alat Heat Exchanger.',
     icon: Server
   },
   {

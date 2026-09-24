@@ -66,7 +66,7 @@ export const OPERATOR_TOUR_STEPS: TourStep[] = [
     tab: 'dashboard',
     badge: 'Koneksi Alat',
     icon: <Server className="w-5 h-5 text-emerald-500" />,
-    title: 'Status Koneksi ESP32',
+    title: 'Status Koneksi Alat',
     description: 'Menampilkan koneksi alat ke cloud. Hijau (ONLINE) menandakan data telemetri aktif diperbarui setiap detik.',
     tips: 'Jika OFFLINE, pastikan rig alat di lab tersambung listrik & WiFi.'
   },
@@ -201,7 +201,7 @@ export const OPERATOR_TOUR_STEPS: TourStep[] = [
     badge: 'Laporan & Ekspor',
     icon: <FileSpreadsheet className="w-5 h-5 text-emerald-600" />,
     title: 'Tabel Telemetri & Unduh Excel',
-    description: 'Data tercatat otomatis per detik. Unduh file Excel (.xlsx) atau cetak Laporan PDF.',
+    description: 'Data tercatat otomatis per detik. Unduh file spreadsheet Excel (.xlsx) untuk analisis data.',
     tips: 'Format Excel sudah rapi dengan lebar kolom yang otomatis teratur.'
   },
 

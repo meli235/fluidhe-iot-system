@@ -14,12 +14,32 @@ export const DataTable: React.FC<DataTableProps> = ({
   filteredLogsData,
   dateFilter
 }) => {
+  const [sortOrder, setSortOrder] = React.useState<'desc' | 'asc'>('desc');
+
+  const displayData = React.useMemo(() => {
+    if (sortOrder === 'desc') {
+      return [...filteredLogsData].reverse();
+    }
+    return filteredLogsData;
+  }, [filteredLogsData, sortOrder]);
+
   return (
     <div className="overflow-x-auto border border-slate-300 rounded-xl shadow-sm">
       <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
         <thead>
           <tr className="bg-[#0B2545] text-white font-bold text-center border-b border-slate-400">
-            <th className="p-2.5 border-r border-slate-600 text-left">Waktu</th>
+            <th
+              className="p-2.5 border-r border-slate-600 text-left cursor-pointer select-none hover:bg-slate-800 transition"
+              onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+              title="Klik untuk membalik urutan waktu (Terbaru / Terlama)"
+            >
+              <div className="flex items-center gap-1.5">
+                <span>Waktu</span>
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-sky-500/30 text-sky-200 border border-sky-400/40">
+                  {sortOrder === 'desc' ? 'Terbaru ↓' : 'Terlama ↑'}
+                </span>
+              </div>
+            </th>
             <th className="p-2.5 border-r border-slate-600">TI-1 Hot In (°C)</th>
             <th className="p-2.5 border-r border-slate-600">TI-2 Hot Out (°C)</th>
             <th className="p-2.5 border-r border-slate-600">TI-3 Cold In (°C)</th>
@@ -39,7 +59,7 @@ export const DataTable: React.FC<DataTableProps> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 text-center font-medium">
-          {filteredLogsData.length === 0 ? (
+          {displayData.length === 0 ? (
             <tr>
               <td colSpan={17} className="p-10 text-center bg-slate-50/50">
                 <div className="flex flex-col items-center justify-center gap-2 py-6">
@@ -56,7 +76,7 @@ export const DataTable: React.FC<DataTableProps> = ({
               </td>
             </tr>
           ) : (
-            filteredLogsData.map((row, idx) => {
+            displayData.map((row, idx) => {
               const dtHot = Math.abs((row.ti1 || 0) - (row.ti2 || 0));
               const dtCold = Math.abs((row.ti4 || 0) - (row.ti3 || 0));
               const lmtdVal = calculateLMTD(
@@ -68,7 +88,14 @@ export const DataTable: React.FC<DataTableProps> = ({
               );
 
               return (
-                <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50 hover:bg-sky-50/50 transition' : 'bg-white hover:bg-sky-50/50 transition'}>
+                <tr
+                  key={idx}
+                  className={
+                    idx % 2 === 1
+                      ? 'bg-slate-50 hover:bg-sky-50/50 transition'
+                      : 'bg-white hover:bg-sky-50/50 transition'
+                  }
+                >
                   <td className="p-2 border-r border-slate-200 text-left font-mono font-semibold text-slate-800">
                     {row.timestamp}
                   </td>

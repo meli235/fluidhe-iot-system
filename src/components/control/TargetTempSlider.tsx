@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronUp, ChevronDown, Flame, Power } from 'lucide-react';
+import { Flame, Power } from 'lucide-react';
 import { ControlMode } from '@/types';
 
 interface TargetTempSliderProps {
@@ -86,35 +86,11 @@ export const TargetTempSlider: React.FC<TargetTempSliderProps> = ({
         </button>
       </div>
 
-      {/* Tombol Interaktif Naik Level dan Turun Level (Tanpa teks Level P) */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={onStepDown}
-          disabled={emergencyStopped || isAuto}
-          className={`py-2 sm:py-2.5 px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-sm cursor-pointer ${
-            isBtnDownActive
-              ? 'bg-slate-900 text-white scale-95 ring-2 ring-slate-400'
-              : 'bg-slate-800 text-white hover:bg-slate-900 active:scale-95'
-          }`}
-        >
-          <ChevronDown className="w-4 h-4 stroke-[3]" />
-          <span>Turun Level</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onStepUp}
-          disabled={emergencyStopped || isAuto}
-          className={`py-2 sm:py-2.5 px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-sm cursor-pointer ${
-            isBtnUpActive
-              ? 'bg-sky-700 text-white scale-95 ring-2 ring-sky-300'
-              : 'bg-sky-600 text-white hover:bg-sky-700 active:scale-95'
-          }`}
-        >
-          <ChevronUp className="w-4 h-4 stroke-[3]" />
-          <span>Naik Level</span>
-        </button>
+      {/* Status Keterangan Saklar Langsung ON/OFF */}
+      <div className="p-2 sm:p-2.5 bg-white rounded-lg sm:rounded-xl border border-slate-200 text-center">
+        <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500">
+          Kontrol Langsung Daya Saklar ON / OFF
+        </span>
       </div>
     </div>
   );

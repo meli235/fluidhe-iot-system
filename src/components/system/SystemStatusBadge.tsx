@@ -68,18 +68,18 @@ export const SystemStatusBadge: React.FC<SystemStatusBadgeProps> = ({
 
   // ACTIVE STATUS: Show Live Duration & Prominent Button to Kill / Turn Off Machine
   return (
-    <div id="tour-system-status" className="flex items-center gap-1.5 sm:gap-2">
+    <div id="tour-system-status" className="flex items-center gap-1 sm:gap-2 shrink-0">
       <div
         title={`Sistem Aktif - Sesi ID: ${sessionId || 'Active'}`}
-        className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-black tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs"
+        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-black tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs"
       >
-        <span className="relative flex h-2 w-2">
+        <span className="relative flex h-2 w-2 shrink-0">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
         </span>
-        <span className="font-extrabold uppercase hidden xs:inline">SISTEM AKTIF</span>
-        <div className="flex items-center gap-1 pl-1 border-l border-emerald-200 text-[10px] font-mono font-bold text-emerald-700">
-          <Clock className="w-3 h-3 text-emerald-600" />
+        <span className="font-extrabold uppercase hidden md:inline">SISTEM AKTIF</span>
+        <div className="flex items-center gap-1 md:pl-1 md:border-l border-emerald-200 text-[10px] sm:text-xs font-mono font-bold text-emerald-700">
+          <Clock className="w-3 h-3 text-emerald-600 shrink-0" />
           <span>{formatDuration(sessionDuration)}</span>
         </div>
       </div>
@@ -88,10 +88,11 @@ export const SystemStatusBadge: React.FC<SystemStatusBadgeProps> = ({
         type="button"
         onClick={onOpenEndSession}
         title="Klik untuk mematikan mesin Heat Exchanger dan mengakhiri sesi praktikum"
-        className="flex items-center gap-1.5 px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-extrabold bg-slate-900 hover:bg-slate-800 text-white shadow-xs border border-slate-700/60 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+        className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-extrabold bg-slate-900 hover:bg-slate-800 text-white shadow-xs border border-slate-700/60 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
       >
-        <Square className="w-3 h-3 fill-slate-300 text-slate-300" />
-        <span>Matikan Mesin</span>
+        <Square className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-rose-400 text-rose-400 shrink-0" />
+        <span className="hidden sm:inline">Matikan Mesin</span>
+        <span className="sm:hidden">Matikan</span>
       </button>
     </div>
   );

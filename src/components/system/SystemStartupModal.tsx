@@ -33,8 +33,8 @@ interface StepItem {
 const STEPS: StepItem[] = [
   {
     id: 1,
-    label: 'Handshake Cloud IoT & ESP32',
-    detail: 'Memverifikasi jalur komunikasi data real-time dengan mikrokontroler.',
+    label: 'Koneksi Cloud & Alat Laboratorium',
+    detail: 'Memverifikasi jalur komunikasi data real-time dengan alat laboratorium.',
     icon: Server
   },
   {

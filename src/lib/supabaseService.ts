@@ -8,7 +8,7 @@ import { getStoredAnonKey } from './supabase';
 /**
  * Mengambil data telemetri awal dari Supabase (via Server Proxy API)
  */
-export async function fetchLatestTelemetry(limit: number = 20): Promise<{ data: TelemetryRow[] | null; error: Error | null }> {
+export async function fetchLatestTelemetry(limit: number = 1000): Promise<{ data: TelemetryRow[] | null; error: Error | null }> {
   try {
     const customKey = getStoredAnonKey();
     const headers: Record<string, string> = {};

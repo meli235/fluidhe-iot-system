@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Power, Zap, Sliders, Check, ChevronUp, ChevronDown, Flame } from 'lucide-react';
+import { Power, Zap, Sliders, Check, Flame } from 'lucide-react';
 import { ControlMode } from '@/types';
 
 export interface DualHeatersControlProps {
@@ -152,44 +152,26 @@ export const DualHeatersControl: React.FC<DualHeatersControlProps> = ({
             </button>
           </div>
 
-          {/* Sub-Card Pengaturan Step Level Target Suhu */}
+          {/* Sub-Card Status & Keterangan Mode Heater 1 (ON / OFF Langsung) */}
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-[11px] font-bold text-slate-700">Target Level Suhu</span>
-              <span className="text-xs font-black text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded border border-sky-200 font-mono">
-                {targetTemp}°C
+              <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                <Power className="w-3.5 h-3.5 text-sky-600" />
+                Mode Saklar Pemanas
+              </span>
+              <span
+                className={`text-[10px] font-extrabold px-2 py-0.5 rounded border transition-all ${
+                  isH1On
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                }`}
+              >
+                {isH1On ? 'Saklar ON' : 'Saklar OFF'}
               </span>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={onStepDown}
-                disabled={emergencyStopped || isAuto}
-                className={`py-2 px-3 rounded-lg text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer ${
-                  isBtnDownActive
-                    ? 'bg-slate-900 text-white scale-95 ring-2 ring-slate-400'
-                    : 'bg-slate-800 text-white hover:bg-slate-900 active:scale-95'
-                }`}
-              >
-                <ChevronDown className="w-4 h-4 stroke-[3]" />
-                <span>Turun Level</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onStepUp}
-                disabled={emergencyStopped || isAuto}
-                className={`py-2 px-3 rounded-lg text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer ${
-                  isBtnUpActive
-                    ? 'bg-sky-700 text-white scale-95 ring-2 ring-sky-300'
-                    : 'bg-sky-600 text-white hover:bg-sky-700 active:scale-95'
-                }`}
-              >
-                <ChevronUp className="w-4 h-4 stroke-[3]" />
-                <span>Naik Level</span>
-              </button>
-            </div>
+            <p className="text-[10.5px] text-slate-500 leading-relaxed">
+              Heater 1 beroperasi dengan saklar <strong>ON / OFF</strong> daya utama (1000 Watt) tanpa modulasi level bertingkat.
+            </p>
           </div>
         </div>
 

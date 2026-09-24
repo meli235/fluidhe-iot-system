@@ -17,6 +17,7 @@ import {
   Users,
   Video,
   FileText,
+  FileSpreadsheet,
   Sliders,
   Power,
   AlertTriangle,
@@ -346,17 +347,6 @@ export default function FluidHEDashboard() {
   const [show1MinWarning, setShow1MinWarning] = useState<boolean>(false);
   const [isCriticalWarningDismissed, setIsCriticalWarningDismissed] = useState<boolean>(false);
 
-  // Reset status dismiss jika parameter tekanan & suhu telah normal kembali
-  useEffect(() => {
-    const isCritical = Boolean(
-      supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
-      (supabaseTelemetry && (supabaseTelemetry.pressure > 2.0 || supabaseTelemetry.temp_1 > 65.0 || supabaseTelemetry.temp_2 > 65.0))
-    );
-    if (!isCritical) {
-      setIsCriticalWarningDismissed(false);
-    }
-  }, [supabaseTelemetry?.warning_status, supabaseTelemetry?.pressure, supabaseTelemetry?.temp_1, supabaseTelemetry?.temp_2]);
-
   // ─── ALARM THRESHOLDS & AUDIO ───
   const [ti1MaxThreshold, setTi1MaxThreshold] = useState<number>(75.0);
   const [deltaPMaxThreshold, setDeltaPMaxThreshold] = useState<number>(2.0);
@@ -419,9 +409,15 @@ export default function FluidHEDashboard() {
   // ─── RESTORE RUNNING SESSION & AUTH ON PAGE LOAD (ANTI KELUAR / ANTI DATA HILANG SAAT REFRESH) ───
   useEffect(() => {
     try {
-      // 1. Sinkronkan status autentikasi dari localStorage (mencegah kembali ke login saat reload)
-      const savedAuth = localStorage.getItem('fluidhe_auth_user');
-      const savedIsLoggedIn = localStorage.getItem('fluidhe_is_logged_in');
+      // Bersihkan data legacy auth dari localStorage agar setiap membuka browser / tab baru selalu dimulai dari Login
+      try {
+        localStorage.removeItem('fluidhe_auth_user');
+        localStorage.removeItem('fluidhe_is_logged_in');
+      } catch (e) {}
+
+      // 1. Sinkronkan status autentikasi dari sessionStorage (hanya aktif per tab yang sedang dibuka, aman saat reload F5)
+      const savedAuth = sessionStorage.getItem('fluidhe_auth_user');
+      const savedIsLoggedIn = sessionStorage.getItem('fluidhe_is_logged_in');
       if (savedIsLoggedIn === 'true' && savedAuth) {
         try {
           const parsedUser = JSON.parse(savedAuth);
@@ -445,7 +441,19 @@ export default function FluidHEDashboard() {
       if (savedState === 'ACTIVE' && savedSessionRaw) {
         try {
           const parsedSession: SystemSession = JSON.parse(savedSessionRaw);
-          if (parsedSession && parsedSession.id) {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const isStaleSession = !parsedSession.date || parsedSession.date !== todayStr;
+
+          if (parsedSession && parsedSession.id && !isStaleSession) {
+            // Bersihkan baris stale/stuck dari bug device_controls sebelumnya
+            if (Array.isArray(parsedSession.data)) {
+              parsedSession.data = parsedSession.data.filter((d) => {
+                if (d.created_at && d.created_at.startsWith('2026-09-18')) return false;
+                if (d.timestamp === '13.30.29') return false;
+                return true;
+              });
+              parsedSession.pointsCount = parsedSession.data.length;
+            }
             setCurrentSession(parsedSession);
             setSystemState('ACTIVE');
 
@@ -457,8 +465,17 @@ export default function FluidHEDashboard() {
 
             // Pulihkan riwayat telemetri sesi aktif ke chart
             if (parsedSession.data && parsedSession.data.length > 0) {
-              setTelemetryHistory(parsedSession.data.slice(-50));
+              setTelemetryHistory(parsedSession.data.slice(-1500));
             }
+          } else {
+            // Sesi kedaluwarsa dari hari sebelumnya, bersihkan agar tidak rancu
+            setSystemState('OFF');
+            setCurrentSession(null);
+            setSessionDuration(0);
+            try {
+              localStorage.removeItem('fluidhe_current_session');
+              localStorage.setItem('fluidhe_system_state', 'OFF');
+            } catch (e) {}
           }
         } catch (err) {
           console.warn('Gagal memulihkan sesi aktif dari localStorage:', err);
@@ -565,7 +582,7 @@ export default function FluidHEDashboard() {
           const flow = supabaseControls.flow_mode === 'CO-CURRENT' ? 'Co-Current' : 'Counter-Current';
           const autoSession: SystemSession = {
             id: `SES-${dateStr.replace(/-/g, '')}-${timeCompact}`,
-            title: `Praktikum IoT ${flow} (${mode || 'AUTO'})`,
+            title: `Praktikum ${flow} (${mode || 'AUTO'})`,
             date: dateStr,
             startTime: timeStr,
             startTimeMs: Date.now(),
@@ -579,6 +596,11 @@ export default function FluidHEDashboard() {
           };
           try {
             localStorage.setItem('fluidhe_current_session', JSON.stringify(autoSession));
+            fetch('/api/sessions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session: autoSession })
+            }).catch(() => {});
           } catch (e) {}
           return autoSession;
         });
@@ -634,12 +656,17 @@ export default function FluidHEDashboard() {
     try {
       localStorage.setItem('fluidhe_system_state', 'ACTIVE');
       localStorage.setItem('fluidhe_current_session', JSON.stringify(newSession));
+      await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: newSession })
+      });
     } catch (e) {}
 
     // Kirim perintah aktifasi serentak ke database & ESP32
     await handleSystemStart(mode);
 
-    triggerSyncFeedback('Sistem Dihidupkan', `Mode ${mode} Aktif - Sinyal Terkirim ke ESP32`);
+    triggerSyncFeedback('Sistem Dihidupkan', `Mode ${mode} Aktif - Sinyal Terkirim ke Alat`);
   };
 
   // ─── CONFIRM SYSTEM SHUTDOWN (SAFE SHUTDOWN & ARCHIVE SESSION) ───
@@ -698,9 +725,58 @@ export default function FluidHEDashboard() {
     }, 1200);
   };
 
+  // ─── RESET & HAPUS SESI AKTIF SECARA TOTAL DARI APLIKASI & SUPABASE ───
+  const handleClearActiveSession = async () => {
+    // 1. Hapus data telemetri di Supabase untuk sesi aktif jika ada rentang waktu
+    if (currentSession) {
+      let minTime: string | null = null;
+      let maxTime: string | null = null;
+      if (currentSession.data && currentSession.data.length > 0) {
+        minTime = currentSession.data[0].created_at || (currentSession.startTimeMs ? new Date(currentSession.startTimeMs - 2000).toISOString() : null);
+        maxTime = currentSession.data[currentSession.data.length - 1].created_at || (currentSession.endTimeMs ? new Date(currentSession.endTimeMs + 2000).toISOString() : null);
+      }
+      if (!minTime && currentSession.startTimeMs) {
+        minTime = new Date(currentSession.startTimeMs - 2000).toISOString();
+        maxTime = new Date(Date.now() + 2000).toISOString();
+      }
+      if (minTime && maxTime) {
+        try {
+          await fetch(`/api/supabase/telemetry?minTime=${encodeURIComponent(minTime)}&maxTime=${encodeURIComponent(maxTime)}`, {
+            method: 'DELETE'
+          });
+        } catch (e) {}
+      }
+      // Hapus sesi aktif dari database server master
+      try {
+        await fetch(`/api/sessions?sessionId=${encodeURIComponent(currentSession.id)}&role=admin`, {
+          method: 'DELETE'
+        });
+      } catch (e) {}
+    }
+
+    // 2. Matikan aktuator & pemanas secara aman
+    setHeaterMasterPower(false);
+    try {
+      await handleSystemShutdown();
+    } catch (e) {}
+
+    // 3. Reset state & storage
+    setCurrentSession(null);
+    setSessionDuration(0);
+    setTelemetryHistory([]);
+    setSystemState('OFF');
+    try {
+      localStorage.setItem('fluidhe_system_state', 'OFF');
+      localStorage.removeItem('fluidhe_current_session');
+    } catch (e) {}
+
+    triggerSyncFeedback('Sesi Aktif Dikosongkan', 'Sesi berjalan telah dihentikan dan seluruh data telemetrinya dibersihkan.');
+  };
+
   // ─── EXPORT CURRENT SESSION EXCEL HANDLER ───
   const handleExportCurrentSessionExcel = () => {
-    const sessionToExport = (selectedLogsSessionId === 'CURRENT' && currentSession)
+    const isCurrentSelected = selectedLogsSessionId === 'CURRENT' || (currentSession && selectedLogsSessionId === currentSession.id);
+    const sessionToExport = (isCurrentSelected && currentSession)
       ? currentSession
       : archivedSessions.find((s) => s.id === selectedLogsSessionId) || currentSession;
 
@@ -721,7 +797,13 @@ export default function FluidHEDashboard() {
   // ─── EXPORT ALL CLASSES MASTER EXCEL HANDLER (ADMIN ONLY) ───
   const handleExportAllClassesExcel = () => {
     if (currentUser?.role !== 'admin') return;
-    const allSessionsToExport = currentSession ? [currentSession, ...archivedSessions] : archivedSessions;
+    const sessionMap = new Map<string, SystemSession>();
+    archivedSessions.forEach((s) => { if (s?.id) sessionMap.set(s.id, s); });
+    if (currentSession?.id) {
+      const existing = sessionMap.get(currentSession.id);
+      sessionMap.set(currentSession.id, { ...(existing || {}), ...currentSession });
+    }
+    const allSessionsToExport = Array.from(sessionMap.values());
     if (allSessionsToExport.length === 0 || allSessionsToExport.every((s) => !s.data || s.data.length === 0)) {
       triggerCctvToast('Belum ada arsip sesi kelas untuk diekspor', 'warning');
       return;
@@ -1115,7 +1197,7 @@ export default function FluidHEDashboard() {
   const [isEditingCctvUrl, setIsEditingCctvUrl] = useState<boolean>(false);
   const [tempCctvUrl, setTempCctvUrl] = useState<string>('http://localhost:8889/stream.html?src=he_cctv');
 
-  // Auto-detect public tunnel URL from URL parameters (?cctv=... / ?tab=cctv)
+  // Auto-detect Cloudflare tunnel URL (from API, localStorage, or query params)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -1125,14 +1207,29 @@ export default function FluidHEDashboard() {
         const host = window.location.hostname;
         const isLocal = host === 'localhost' || host === '127.0.0.1';
 
-        if (isLocal) {
-          setCctvStreamSource('local');
-        } else if (paramCctv) {
+        // Selalu default ke local player agar kontrol PTZ, snapshot, & audio WebRTC aktif
+        setCctvStreamSource('local');
+
+        const savedLocal = localStorage.getItem('fluidhe_cctv_public_url');
+        if (paramCctv) {
           const clean = paramCctv.trim().replace(/\/+$/, '');
           setCctvPublicUrl(clean);
-          setCctvIpUrl(`${clean}/stream.html?src=he_cctv`);
-          setCctvStreamSource('custom');
+          localStorage.setItem('fluidhe_cctv_public_url', clean);
+        } else if (savedLocal) {
+          setCctvPublicUrl(savedLocal.trim().replace(/\/+$/, ''));
         }
+
+        // Ambil konfigurasi tunnel aktif dari server
+        fetch('/api/cctv/tunnel')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.success && data?.publicUrl) {
+              const clean = data.publicUrl.trim().replace(/\/+$/, '');
+              setCctvPublicUrl(clean);
+              localStorage.setItem('fluidhe_cctv_public_url', clean);
+            }
+          })
+          .catch(() => {});
 
         if (paramTab === 'cctv') {
           setActiveTab('cctv');
@@ -1218,32 +1315,8 @@ export default function FluidHEDashboard() {
 
   // ─── DUAL HEATER STAGED CONTROL LOGIC ───
   const latestData = useMemo(() => {
-    // 1. Prioritas Utama: Telemetri Hardware ESP32 yang dikirim via device_controls
-    if (supabaseControls && (supabaseControls as any).temp_1 !== undefined) {
-      const c = supabaseControls as any;
-      const isH1 = Boolean(c.heater_1_status ?? c.btn_onoff ?? c.heater_status);
-      const isH2 = Boolean(c.heater_2_status);
-      return {
-        timestamp: c.updated_at
-          ? new Date(c.updated_at).toLocaleTimeString('id-ID')
-          : new Date().toLocaleTimeString('id-ID'),
-        ti1: Number(c.temp_1 || 0),
-        ti2: Number(c.temp_2 || 0),
-        ti3: Number(c.temp_3 || 0),
-        ti4: Number(c.temp_4 || 0),
-        ti5: parseFloat(((Number(c.temp_3 || 0) + Number(c.temp_4 || 0)) / 2).toFixed(1)),
-        ti6: parseFloat(((Number(c.temp_1 || 0) + Number(c.temp_2 || 0)) / 2).toFixed(1)),
-        pi1: parseFloat(Number(c.pressure || 0).toFixed(2)),
-        pi2: c.pressure_outlet !== undefined ? parseFloat(Number(c.pressure_outlet).toFixed(2)) : 0,
-        pi3: c.pressure_inlet_2 !== undefined ? parseFloat(Number(c.pressure_inlet_2).toFixed(2)) : 0,
-        pi4: c.pressure_outlet_2 !== undefined ? parseFloat(Number(c.pressure_outlet_2).toFixed(2)) : 0,
-        fc1: parseFloat(Number(c.flow_rate || 0).toFixed(2)),
-        fc2: c.flow_rate_2 !== undefined ? parseFloat(Number(c.flow_rate_2).toFixed(2)) : 0,
-        tc1Setpoint: c.target_temp || tc1Setpoint,
-        heater1Active: isH1,
-        heater2Active: isH2,
-        mode: (c.flow_mode === 'COUNTER' ? 'Counter-Current' : 'Co-Current') as any
-      };
+    if (telemetryHistory.length > 0) {
+      return telemetryHistory[telemetryHistory.length - 1];
     }
 
     if (telemetryHistory.length === 0) {
@@ -1292,7 +1365,7 @@ export default function FluidHEDashboard() {
       };
     }
     return telemetryHistory[telemetryHistory.length - 1];
-  }, [telemetryHistory, supabaseTelemetry, supabaseControls, tc1Setpoint, operationMode]);
+  }, [isHardwareOnline, telemetryHistory, supabaseTelemetry, supabaseControls, tc1Setpoint, operationMode]);
 
   const dualHeaterState = useMemo(() => {
     const isPrimed = fc1Valve > 0;
@@ -1367,20 +1440,40 @@ export default function FluidHEDashboard() {
   }, [heaterMasterPower, emergencyStopped, fc1Valve, supabaseControls?.control_mode, supabaseControls?.heater_1_status, supabaseControls?.heater_2_status, latestData.ti1, latestData.ti2]);
 
   const deltaPHot = useMemo(() => {
+    if (!isHardwareOnline) return 0;
     return parseFloat((latestData.pi1 - latestData.pi2).toFixed(2));
-  }, [latestData.pi1, latestData.pi2]);
+  }, [isHardwareOnline, latestData.pi1, latestData.pi2]);
 
   const deltaPCold = useMemo(() => {
+    if (!isHardwareOnline) return 0;
     return parseFloat((latestData.pi3 - latestData.pi4).toFixed(2));
-  }, [latestData.pi3, latestData.pi4]);
+  }, [isHardwareOnline, latestData.pi3, latestData.pi4]);
+
+  const currentDeltaP = useMemo(() => {
+    return Math.max(Math.abs(deltaPHot), Math.abs(deltaPCold));
+  }, [deltaPHot, deltaPCold]);
+
+  const isCriticalUapCondition = useMemo(() => {
+    return Boolean(
+      supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
+      currentDeltaP > (deltaPMaxThreshold || 2.0)
+    );
+  }, [supabaseTelemetry?.warning_status, currentDeltaP, deltaPMaxThreshold]);
+
+  // Reset status dismiss jika parameter delta telah normal kembali di bawah batas aman
+  useEffect(() => {
+    if (!isCriticalUapCondition) {
+      setIsCriticalWarningDismissed(false);
+    }
+  }, [isCriticalUapCondition]);
 
   const isAlarmActive = useMemo(() => {
-    // Sirine & peringatan alarm HANYA AKTIF jika user sudah LOGIN dan sistem IoT sedang AKTIF
-    if (!isLoggedIn || systemState !== 'ACTIVE') {
+    // Sirine & peringatan alarm HANYA AKTIF jika user sudah LOGIN, sistem IoT AKTIF, dan alat ESP32 ONLINE
+    if (!isHardwareOnline || !isLoggedIn || systemState !== 'ACTIVE') {
       return false;
     }
-    return latestData.ti1 > ti1MaxThreshold || deltaPHot > deltaPMaxThreshold;
-  }, [isLoggedIn, systemState, latestData.ti1, ti1MaxThreshold, deltaPHot, deltaPMaxThreshold]);
+    return latestData.ti1 > ti1MaxThreshold || currentDeltaP > (deltaPMaxThreshold || 2.0);
+  }, [isHardwareOnline, isLoggedIn, systemState, latestData.ti1, ti1MaxThreshold, currentDeltaP, deltaPMaxThreshold]);
 
   // ─── OPERATOR SESSION TIMER EFFECT ───
   useEffect(() => {
@@ -1413,7 +1506,7 @@ export default function FluidHEDashboard() {
 
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null;
-    const isHeating = (heaterMasterPower || supabaseControls?.heater_1_status || supabaseControls?.btn_onoff) && !emergencyStopped && fc1Valve > 0;
+    const isHeating = isHardwareOnline && (heaterMasterPower || supabaseControls?.heater_1_status || supabaseControls?.btn_onoff) && !emergencyStopped && fc1Valve > 0;
 
     if (isHeating && latestData.ti2 < tc1Setpoint - 1.5) {
       timer = setInterval(() => {
@@ -1435,7 +1528,7 @@ export default function FluidHEDashboard() {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [heaterMasterPower, supabaseControls?.heater_1_status, supabaseControls?.btn_onoff, emergencyStopped, fc1Valve, latestData.ti2, tc1Setpoint]);
+  }, [isHardwareOnline, heaterMasterPower, supabaseControls?.heater_1_status, supabaseControls?.btn_onoff, emergencyStopped, fc1Valve, latestData.ti2, tc1Setpoint]);
 
   // ─── AUDIO SYNTHESIZER SIREN FOR ALARM ───
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -1494,127 +1587,160 @@ export default function FluidHEDashboard() {
     };
   }, [isAlarmActive, soundEnabled, isLoggedIn, systemState]);
 
-  // ─── TELEMETRY SIMULATION LOOP (WITH DUAL HEATER & SOLENOID VALVES) ───
   // ─── TELEMETRY DATA HANDLER (REAL-TIME SUPABASE TELEMETRY_DATA ONLY) ───
   useEffect(() => {
-    // 1. Prioritas Utama: Telemetri Hardware ESP32 yang dikirim via device_controls (Row ID=1)
-    if (supabaseControls && (supabaseControls as any).temp_1 !== undefined) {
-      const c = supabaseControls as any;
-      const isH1 = Boolean(c.heater_1_status ?? c.btn_onoff ?? c.heater_status);
-      const isH2 = Boolean(c.heater_2_status);
-      const newPoint: TelemetryPoint = {
-        timestamp: c.updated_at
-          ? new Date(c.updated_at).toLocaleTimeString('id-ID')
-          : new Date().toLocaleTimeString('id-ID'),
-        created_at: c.updated_at || new Date().toISOString(),
-        ti1: Number(c.temp_1 || 0),
-        ti2: Number(c.temp_2 || 0),
-        ti3: Number(c.temp_3 || 0),
-        ti4: Number(c.temp_4 || 0),
-        ti5: parseFloat(((Number(c.temp_3 || 0) + Number(c.temp_4 || 0)) / 2).toFixed(1)),
-        ti6: parseFloat(((Number(c.temp_1 || 0) + Number(c.temp_2 || 0)) / 2).toFixed(1)),
-        pi1: parseFloat(Number(c.pressure || 0).toFixed(2)),
-        pi2: c.pressure_outlet !== undefined ? parseFloat(Number(c.pressure_outlet).toFixed(2)) : 0,
-        pi3: c.pressure_inlet_2 !== undefined ? parseFloat(Number(c.pressure_inlet_2).toFixed(2)) : 0,
-        pi4: c.pressure_outlet_2 !== undefined ? parseFloat(Number(c.pressure_outlet_2).toFixed(2)) : 0,
-        fc1: parseFloat(Number(c.flow_rate || 0).toFixed(2)),
-        fc2: c.flow_rate_2 !== undefined ? parseFloat(Number(c.flow_rate_2).toFixed(2)) : 0,
-        tc1Setpoint: c.target_temp || tc1Setpoint,
-        heater1Active: isH1,
-        heater2Active: isH2,
-        mode: c.flow_mode === 'COUNTER' ? 'Counter-Current' : 'Co-Current'
-      };
-
-      setTelemetryHistory((prev) => {
-        if (prev.length > 0 && prev[prev.length - 1].timestamp === newPoint.timestamp) {
-          const updated = [...prev];
-          updated[updated.length - 1] = newPoint;
-          return updated;
-        }
-        return [...prev.slice(-29), newPoint];
-      });
-
-      // ─── IF SYSTEM IS ACTIVE, RECORD POINT TO CURRENT SESSION (ANTI DATA TERCAMPUR) ───
-      if (systemState === 'ACTIVE') {
-        setCurrentSession((prev) => {
-          if (!prev) return prev;
-          const currentData = prev.data || [];
-          if (currentData.length > 0 && currentData[currentData.length - 1].timestamp === newPoint.timestamp) {
-            const updatedData = [...currentData];
-            updatedData[updatedData.length - 1] = newPoint;
-            return { ...prev, data: updatedData, pointsCount: updatedData.length };
-          }
-          const updatedData = [...currentData, newPoint];
-          const updatedSession = { ...prev, data: updatedData, pointsCount: updatedData.length };
-          try {
-            localStorage.setItem('fluidhe_current_session', JSON.stringify(updatedSession));
-          } catch (e) {}
-          return updatedSession;
-        });
-      }
-      return;
-    }
-
     const streamToUse = (telemetryStream && telemetryStream.length > 0)
       ? telemetryStream
       : (supabaseTelemetry ? [supabaseTelemetry] : []);
 
-    if (streamToUse.length > 0) {
-      // Filter out stale data from previous dates if latest point is from today / current active session
-      const latestRow = streamToUse[streamToUse.length - 1];
-      const latestDateStr = latestRow.created_at ? new Date(latestRow.created_at).toDateString() : new Date().toDateString();
-      const filteredStream = streamToUse.filter((row) => {
-        if (!row.created_at) return true;
-        const rowDateStr = new Date(row.created_at).toDateString();
-        return rowDateStr === latestDateStr;
-      });
-
-      const realHistory: TelemetryPoint[] = filteredStream.map((row) => {
-        const isHeaterOn = row.heater_status === 'ON';
-        return {
-          timestamp: row.created_at
-            ? new Date(row.created_at).toLocaleTimeString('id-ID')
-            : new Date().toLocaleTimeString('id-ID'),
-          created_at: row.created_at || new Date().toISOString(),
-          ti1: row.temp_1,
-          ti2: row.temp_2,
-          ti3: row.temp_3,
-          ti4: row.temp_4,
-          ti5: parseFloat(((row.temp_3 + row.temp_4) / 2).toFixed(1)),
-          ti6: parseFloat(((row.temp_1 + row.temp_2) / 2).toFixed(1)),
-          pi1: parseFloat(Number(row.pressure || 0).toFixed(2)),
-          pi2: row.pressure_outlet !== undefined ? parseFloat(Number(row.pressure_outlet).toFixed(2)) : parseFloat((Number(row.pressure || 0) * 0.82).toFixed(2)),
-          pi3: row.pressure_inlet_2 !== undefined ? parseFloat(Number(row.pressure_inlet_2).toFixed(2)) : parseFloat((Number(row.pressure || 0) * 0.90).toFixed(2)),
-          pi4: row.pressure_outlet_2 !== undefined ? parseFloat(Number(row.pressure_outlet_2).toFixed(2)) : parseFloat((Number(row.pressure || 0) * 0.72).toFixed(2)),
-          fc1: parseFloat(Number(row.flow_rate || 0).toFixed(1)),
-          fc2: row.flow_rate_2 !== undefined ? parseFloat(Number(row.flow_rate_2).toFixed(1)) : parseFloat((Number(row.flow_rate || 0) * 1.15).toFixed(1)),
-          tc1Setpoint: supabaseControls.target_temp,
-          heater1Active: isHeaterOn,
-          heater2Active: isHeaterOn,
-          mode: supabaseControls.flow_mode === 'COUNTER' ? 'Counter-Current' : 'Co-Current'
-        };
-      });
-      setTelemetryHistory(realHistory);
-
-      if (systemState === 'ACTIVE' && realHistory.length > 0) {
-        const latestPoint = realHistory[realHistory.length - 1];
-        setCurrentSession((prev) => {
-          if (!prev) return prev;
-          const currentData = prev.data || [];
-          if (currentData.length > 0 && currentData[currentData.length - 1].timestamp === latestPoint.timestamp) {
-            return prev;
-          }
-          const updatedData = [...currentData, latestPoint];
-          const updatedSession = { ...prev, data: updatedData, pointsCount: updatedData.length };
-          try {
-            localStorage.setItem('fluidhe_current_session', JSON.stringify(updatedSession));
-          } catch (e) {}
-          return updatedSession;
-        });
-      }
+    if (streamToUse.length === 0) {
       return;
     }
-  }, [supabaseStatus, supabaseTelemetry, telemetryStream, supabaseControls, tc1Setpoint, operationMode, systemState]);
+
+    // Filter data hari ini agar riwayat telemetri akurat sesuai sesi berjalan
+    const latestRow = streamToUse[streamToUse.length - 1];
+    const latestDateStr = latestRow.created_at ? new Date(latestRow.created_at).toDateString() : new Date().toDateString();
+    const filteredStream = streamToUse.filter((row) => {
+      if (!row.created_at) return true;
+      return new Date(row.created_at).toDateString() === latestDateStr;
+    });
+
+    const realHistory: TelemetryPoint[] = filteredStream.map((row) => {
+      const isHeaterOn = row.heater_status === 'ON' || Boolean(supabaseControls?.heater_1_status || supabaseControls?.heater_2_status);
+      const rowDate = row.created_at ? new Date(row.created_at) : new Date();
+      return {
+        timestamp: rowDate.toLocaleTimeString('id-ID'),
+        created_at: row.created_at || rowDate.toISOString(),
+        ti1: Number(row.temp_1 || 0),
+        ti2: Number(row.temp_2 || 0),
+        ti3: Number(row.temp_3 || 0),
+        ti4: Number(row.temp_4 || 0),
+        ti5: parseFloat(((Number(row.temp_3 || 0) + Number(row.temp_4 || 0)) / 2).toFixed(1)),
+        ti6: parseFloat(((Number(row.temp_1 || 0) + Number(row.temp_2 || 0)) / 2).toFixed(1)),
+        pi1: parseFloat(Number(row.pressure || 0).toFixed(2)),
+        pi2: row.pressure_outlet !== undefined ? parseFloat(Number(row.pressure_outlet).toFixed(2)) : parseFloat((Number(row.pressure || 0) * 0.82).toFixed(2)),
+        pi3: row.pressure_inlet_2 !== undefined ? parseFloat(Number(row.pressure_inlet_2).toFixed(2)) : parseFloat((Number(row.pressure || 0) * 0.90).toFixed(2)),
+        pi4: row.pressure_outlet_2 !== undefined ? parseFloat(Number(row.pressure_outlet_2).toFixed(2)) : parseFloat((Number(row.pressure || 0) * 0.72).toFixed(2)),
+        fc1: parseFloat(Number(row.flow_rate || 0).toFixed(2)),
+        fc2: row.flow_rate_2 !== undefined ? parseFloat(Number(row.flow_rate_2).toFixed(2)) : parseFloat((Number(row.flow_rate || 0) * 1.15).toFixed(2)),
+        tc1Setpoint: supabaseControls?.target_temp || tc1Setpoint,
+        heater1Active: Boolean(supabaseControls?.heater_1_status ?? isHeaterOn),
+        heater2Active: Boolean(supabaseControls?.heater_2_status ?? isHeaterOn),
+        mode: (supabaseControls?.flow_mode === 'COUNTER' ? 'Counter-Current' : 'Co-Current') as any
+      };
+    });
+
+    setTelemetryHistory(realHistory);
+
+    // ─── RECORD REAL-TIME TELEMETRY INTO ACTIVE PRACTICUM SESSION ───
+    if (systemState === 'ACTIVE' && realHistory.length > 0) {
+      setCurrentSession((prev) => {
+        if (!prev) return prev;
+        const currentData = prev.data || [];
+        const existingKeys = new Set(
+          currentData.map((d) => d.created_at || d.timestamp)
+        );
+
+        // Ambil point-point baru dari realHistory yang terjadi setelah sesi dimulai
+        const newPointsToAdd: TelemetryPoint[] = [];
+        for (const pt of realHistory) {
+          const ptKey = pt.created_at || pt.timestamp;
+          if (existingKeys.has(ptKey)) {
+            continue;
+          }
+          // Verifikasi waktu: jangan masukkan data lama dari sebelum sesi dimulai (toleransi 5s)
+          if (prev.startTimeMs && pt.created_at) {
+            const ptTime = new Date(pt.created_at).getTime();
+            if (ptTime < prev.startTimeMs - 5000) {
+              continue;
+            }
+          }
+          existingKeys.add(ptKey);
+          newPointsToAdd.push(pt);
+        }
+
+        if (newPointsToAdd.length === 0) {
+          return prev;
+        }
+
+        const updatedData = [...currentData, ...newPointsToAdd];
+        const updatedSession: SystemSession = {
+          ...prev,
+          data: updatedData,
+          pointsCount: updatedData.length
+        };
+        try {
+          localStorage.setItem('fluidhe_current_session', JSON.stringify(updatedSession));
+        } catch (e) {}
+        return updatedSession;
+      });
+    }
+  }, [isHardwareOnline, supabaseStatus, supabaseTelemetry, telemetryStream, supabaseControls, tc1Setpoint, operationMode, systemState]);
+
+  // ─── AUTO-SYNC RUNNING SESSION TO MASTER SERVER (/api/sessions) SO ADMIN SEES IT IN REAL TIME ───
+  const lastAutoSyncedCountRef = useRef<number>(-1);
+  const sessionDurationRef = useRef<number>(sessionDuration);
+  useEffect(() => {
+    sessionDurationRef.current = sessionDuration;
+  }, [sessionDuration]);
+
+  useEffect(() => {
+    if (!currentSession || !currentSession.id || systemState !== 'ACTIVE') return;
+    const count = currentSession.data ? currentSession.data.length : 0;
+    if (count === lastAutoSyncedCountRef.current) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        lastAutoSyncedCountRef.current = count;
+        await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session: {
+              ...currentSession,
+              durationSeconds: sessionDurationRef.current,
+              pointsCount: count
+            }
+          })
+        });
+      } catch (err) {
+        console.warn('Auto-sync session to server error:', err);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [currentSession?.data?.length, currentSession?.id, systemState]);
+
+  // Standing periodic sync every 5 seconds for active session duration & points
+  useEffect(() => {
+    if (!currentSession || !currentSession.id || systemState !== 'ACTIVE') return;
+    const interval = setInterval(async () => {
+      try {
+        const count = currentSession.data ? currentSession.data.length : 0;
+        await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session: {
+              ...currentSession,
+              durationSeconds: sessionDurationRef.current,
+              pointsCount: count
+            }
+          })
+        });
+      } catch (e) {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [currentSession?.id, systemState]);
+
+  // ─── PERIODIC SYNC SESSIONS POLLING FROM SERVER (SO ADMIN AUTOMATICALLY RECEIVES OPERATOR SESSIONS) ───
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser?.email) return;
+    const interval = setInterval(() => {
+      fetchSessions(currentUser.role, currentUser.email, classFilter);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn, currentUser?.role, currentUser?.email, classFilter, fetchSessions]);
 
   // ─── OTP PASSWORD RESET HANDLERS (SECURE EMAIL VERIFICATION FOR ALL REGISTERED USERS) ───
   const handleRequestOtp = async (e?: React.SyntheticEvent) => {
@@ -1777,7 +1903,7 @@ export default function FluidHEDashboard() {
           }
         } else if (state === 'failed') {
           setWebrtcConnected(false);
-          setWebrtcError('Koneksi WebRTC gagal. Pastikan kamera dan go2rtc aktif.');
+          setWebrtcError('Koneksi WebRTC gagal. Klik Coba Sambung Ulang.');
         } else if (state === 'disconnected' || state === 'closed') {
           setWebrtcConnected(false);
         }
@@ -1821,7 +1947,7 @@ export default function FluidHEDashboard() {
       }
 
       if (!resp || !resp.ok) {
-        setWebrtcError('WebRTC belum tersambung. Pastikan go2rtc aktif atau beralih ke Mode Cloud Web Player.');
+        setWebrtcError('Koneksi WebRTC belum tersambung. Klik Coba Sambung Ulang.');
         setWebrtcConnected(false);
         return;
       }
@@ -2343,8 +2469,8 @@ export default function FluidHEDashboard() {
       setIsLoggedIn(true);
       setActiveTab('dashboard');
       try {
-        localStorage.setItem('fluidhe_auth_user', JSON.stringify(userObj));
-        localStorage.setItem('fluidhe_is_logged_in', 'true');
+        sessionStorage.setItem('fluidhe_auth_user', JSON.stringify(userObj));
+        sessionStorage.setItem('fluidhe_is_logged_in', 'true');
         localStorage.setItem('fluidhe_active_tab', 'dashboard');
       } catch (e) {}
       return;
@@ -2383,8 +2509,8 @@ export default function FluidHEDashboard() {
       setIsLoggedIn(true);
       setActiveTab('dashboard');
       try {
-        localStorage.setItem('fluidhe_auth_user', JSON.stringify(userObj));
-        localStorage.setItem('fluidhe_is_logged_in', 'true');
+        sessionStorage.setItem('fluidhe_auth_user', JSON.stringify(userObj));
+        sessionStorage.setItem('fluidhe_is_logged_in', 'true');
         localStorage.setItem('fluidhe_active_tab', 'dashboard');
       } catch (e) {}
       return;
@@ -2524,8 +2650,8 @@ export default function FluidHEDashboard() {
     setIsLoggedIn(true);
     setActiveTab('dashboard');
     try {
-      localStorage.setItem('fluidhe_auth_user', JSON.stringify(loggedInUser));
-      localStorage.setItem('fluidhe_is_logged_in', 'true');
+      sessionStorage.setItem('fluidhe_auth_user', JSON.stringify(loggedInUser));
+      sessionStorage.setItem('fluidhe_is_logged_in', 'true');
       localStorage.setItem('fluidhe_active_tab', 'dashboard');
     } catch (e) {}
   };
@@ -2545,6 +2671,8 @@ export default function FluidHEDashboard() {
     setCurrentSession(null);
     setSessionDuration(0);
     try {
+      sessionStorage.removeItem('fluidhe_auth_user');
+      sessionStorage.removeItem('fluidhe_is_logged_in');
       localStorage.removeItem('fluidhe_auth_user');
       localStorage.removeItem('fluidhe_is_logged_in');
       localStorage.removeItem('fluidhe_active_tab');
@@ -2627,7 +2755,7 @@ export default function FluidHEDashboard() {
       },
       ...prev
     ]);
-    triggerSyncFeedback('EMERGENCY STOP', 'Perintah Matikan Darurat Dikirim ke ESP32');
+    triggerSyncFeedback('EMERGENCY STOP', 'Perintah Matikan Darurat Dikirim ke Alat');
   };
 
   const resetEmergencyStop = async () => {
@@ -2640,7 +2768,8 @@ export default function FluidHEDashboard() {
 
   // ─── ACTIVE SESSION DATA SELECTION (ANTI DATA TERCAMPUR) ───
   const activeSessionData = useMemo(() => {
-    if (selectedLogsSessionId === 'CURRENT') {
+    const isCurrentSelected = selectedLogsSessionId === 'CURRENT' || (currentSession && selectedLogsSessionId === currentSession.id);
+    if (isCurrentSelected) {
       return (currentSession && currentSession.data && currentSession.data.length > 0)
         ? currentSession.data
         : telemetryHistory;
@@ -2653,13 +2782,16 @@ export default function FluidHEDashboard() {
     if (archivedSessions.length > 0 && selectedLogsSessionId !== 'CURRENT') {
       return archivedSessions[0].data || [];
     }
+    if (currentSession && currentSession.data && currentSession.data.length > 0) {
+      return currentSession.data;
+    }
     return [];
   }, [selectedLogsSessionId, currentSession, telemetryHistory, archivedSessions]);
 
   // ─── DOWNSAMPLED LOGS FOR INTERVAL EXPORT & TABLE (1s, 2s, 5s, 30s, 1m) ───
   const filteredLogsData = useMemo(() => {
-    // 1. Date Filter Logic: If looking at current live session with past date filter, return empty list
-    if (selectedLogsSessionId === 'CURRENT' && (dateFilter === 'Yesterday' || dateFilter === '7Days')) {
+    const isCurrentSelected = selectedLogsSessionId === 'CURRENT' || (currentSession && selectedLogsSessionId === currentSession.id);
+    if (isCurrentSelected && (dateFilter === 'Yesterday' || dateFilter === '7Days')) {
       return [];
     }
 
@@ -2680,12 +2812,9 @@ export default function FluidHEDashboard() {
     });
 
     // 3. Downsampling based on logInterval
-    if (logInterval === '1s') {
+    // Data dari ESP32 dikirim per ~4-5 detik, sehingga untuk 1s, 2s, dan 5s tampilkan 100% data tanpa eliminasi
+    if (logInterval === '1s' || logInterval === '2s' || logInterval === '5s') {
       return queryFiltered;
-    } else if (logInterval === '2s') {
-      return queryFiltered.filter((_, idx) => idx % 2 === 0);
-    } else if (logInterval === '5s') {
-      return queryFiltered.filter((_, idx) => idx % 5 === 0);
     } else if (logInterval === '30s') {
       return queryFiltered.filter((_, idx) => idx % 6 === 0);
     } else if (logInterval === '1m') {
@@ -2704,10 +2833,6 @@ export default function FluidHEDashboard() {
   const handleCloudDriveAccess = () => {
     setIsCloudDriveModalOpen(true);
     setCloudLastSyncTime(new Date().toLocaleTimeString('id-ID'));
-  };
-
-  const exportPDFReport = () => {
-    window.print();
   };
 
   const handleExportAndUpload = async () => {
@@ -2799,6 +2924,7 @@ export default function FluidHEDashboard() {
         solenoidValves={solenoidValves}
         deltaPHot={deltaPHot}
         onHoverSensor={setActivePidHover}
+        isHardwareOnline={isHardwareOnline}
       />
     );
   };
@@ -2928,7 +3054,7 @@ export default function FluidHEDashboard() {
             <button
               onClick={() => {
                 setSessionExpiredModal(false);
-                setIsLoggedIn(false);
+                handleLogout();
               }}
               className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md"
             >
@@ -3092,9 +3218,9 @@ export default function FluidHEDashboard() {
       )}
 
       {/* ─── TOP HEADER BAR ─── */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-2 sm:px-6 py-2 sm:py-3 flex items-center justify-between no-print gap-1 sm:gap-3">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-2.5 sm:px-6 py-2 sm:py-3 flex items-center justify-between no-print gap-1 sm:gap-3">
         {/* Left Section: Menu Toggle + Logo + Title */}
-        <div id="tour-header-title" className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div id="tour-header-title" className="flex items-center gap-1.5 sm:gap-3 shrink-0 min-w-0">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="md:hidden p-1.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition focus:outline-none shrink-0 cursor-pointer"
@@ -3103,15 +3229,15 @@ export default function FluidHEDashboard() {
             {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          <div className="w-9 h-9 sm:w-12 sm:h-12 relative flex items-center justify-center p-1 bg-white rounded-xl shadow-xs border border-slate-200/80 shrink-0">
+          <div className="w-8 h-8 sm:w-11 sm:h-11 relative flex items-center justify-center p-1 bg-white rounded-xl shadow-xs border border-slate-200/80 shrink-0">
             <img src="/uad-logo.png" alt="Logo UAD" className="w-full h-full object-contain scale-105" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-xs sm:text-lg font-extrabold text-slate-900 tracking-tight whitespace-nowrap">
                 FluidHE<span className="hidden sm:inline"> Dashboard</span>
               </h1>
-              <span className="hidden sm:inline-block px-2 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-bold rounded-full whitespace-nowrap">
+              <span className="hidden md:inline-block px-2 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-bold rounded-full whitespace-nowrap">
                 UAD Kampus IV
               </span>
             </div>
@@ -3121,16 +3247,15 @@ export default function FluidHEDashboard() {
 
         {/* Right Section: Status Badges & User Actions */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-
           {/* Interactive Guided Tour Button */}
           <button
             type="button"
             onClick={() => setIsTourOpen(true)}
-            className="flex items-center gap-1 p-1.5 sm:px-3 sm:py-1 bg-gradient-to-r from-sky-50 to-indigo-50 hover:from-sky-100 hover:to-indigo-100 text-sky-800 border border-sky-200/80 rounded-full text-[10px] sm:text-xs font-extrabold shadow-xs transition active:scale-95 whitespace-nowrap cursor-pointer ring-1 ring-sky-500/10"
+            className="hidden sm:flex items-center gap-1 p-1.5 sm:px-3 sm:py-1 bg-gradient-to-r from-sky-50 to-indigo-50 hover:from-sky-100 hover:to-indigo-100 text-sky-800 border border-sky-200/80 rounded-full text-[10px] sm:text-xs font-extrabold shadow-xs transition active:scale-95 whitespace-nowrap cursor-pointer ring-1 ring-sky-500/10"
             title="Buka Panduan Tutorial Interaktif"
           >
             <HelpCircle className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
-            <span className="hidden sm:inline">Panduan</span>
+            <span>Panduan</span>
           </button>
 
           {/* ─── SYSTEM READINESS & STATUS BADGE (MATI / STANDBY / AKTIF) ─── */}
@@ -3142,17 +3267,17 @@ export default function FluidHEDashboard() {
             onOpenEndSession={() => setIsEndSessionModalOpen(true)}
           />
 
-          {/* Supabase & ESP32 Hardware Connection Status Badge */}
+          {/* Hardware Connection Status Badge */}
           <div
             id="tour-iot-badge"
             title={
               supabaseStatus === 'ONLINE'
                 ? isHardwareOnline
-                  ? 'Hardware ESP32 aktif mengirimkan telemetri secara real-time.'
-                  : 'Koneksi Cloud Supabase Siap, menunggu pengiriman data dari alat ESP32.'
-                : 'Koneksi ke Supabase Cloud belum terhubung.'
+                  ? 'Alat laboratorium aktif mengirimkan data secara real-time.'
+                  : 'Menunggu pengiriman data dari alat laboratorium.'
+                : 'Koneksi cloud belum terhubung.'
             }
-            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold border transition whitespace-nowrap ${supabaseStatus === 'ONLINE'
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold border transition whitespace-nowrap shrink-0 ${supabaseStatus === 'ONLINE'
                 ? isHardwareOnline
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                   : 'bg-amber-50 text-amber-800 border-amber-200'
@@ -3171,21 +3296,17 @@ export default function FluidHEDashboard() {
                     : 'bg-red-500'
                 }`}
             />
-            <span>
+            <span className="hidden xs:inline sm:inline">
               {supabaseStatus === 'ONLINE' ? (
                 isHardwareOnline ? (
-                  <>
-                    <span className="hidden sm:inline">ESP32: </span>ONLINE
-                  </>
+                  'ONLINE'
                 ) : (
-                  <>
-                    <span className="hidden sm:inline">ESP32: </span>OFFLINE
-                  </>
+                  'OFFLINE'
                 )
               ) : supabaseStatus === 'CONNECTING' ? (
                 'CONNECTING...'
               ) : (
-                'CLOUD OFFLINE'
+                'OFFLINE'
               )}
             </span>
           </div>
@@ -3195,7 +3316,7 @@ export default function FluidHEDashboard() {
               type="button"
               onClick={() => setIsSessionInfoModalOpen(true)}
               title="Klik untuk informasi batas waktu sesi praktikum"
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-[10px] sm:text-xs font-bold whitespace-nowrap shadow-xs transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-[10px] sm:text-xs font-bold whitespace-nowrap shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
             >
               <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
               <span>Sesi: {Math.floor(operatorSessionRemaining / 60)}m</span>
@@ -3395,11 +3516,10 @@ export default function FluidHEDashboard() {
         <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-3.5 sm:p-4 md:p-6 space-y-6 overflow-y-auto pb-24 md:pb-6">
 
           {/* SAFETY / WARNING BANNERS (HANYA MUNCUL DI TAB MONITORING AKTIF & TIDAK MUNCUL DI LAPORAN / PRINT) */}
-          {/* 🚨 CRITICAL WARNING SYSTEM POP-UP BANNER (WARN_BKA_UAP / PRESSURE & TEMP ALERT) */}
+          {/* 🚨 CRITICAL WARNING SYSTEM POP-UP BANNER (WARN_BKA_UAP / DELTA PRESSURE ALERT) */}
           {(activeTab === 'dashboard' || activeTab === 'control') &&
             !isCriticalWarningDismissed &&
-            (supabaseTelemetry?.warning_status === 'WARN_BKA_UAP' ||
-            (supabaseTelemetry && (supabaseTelemetry.pressure > 2.0 || supabaseTelemetry.temp_1 > 65.0 || supabaseTelemetry.temp_2 > 65.0))) && (
+            isCriticalUapCondition && (
               <div className="no-print print:hidden p-4 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white border-2 border-red-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-red-600/30 animate-pulse">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-white/20 rounded-xl shrink-0">
@@ -3407,7 +3527,7 @@ export default function FluidHEDashboard() {
                   </div>
                   <div>
                     <h4 className="font-black text-sm sm:text-base text-white tracking-wide uppercase flex items-center gap-2 flex-wrap">
-                      PERINGATAN BAHAYA: Tekanan atau Suhu Kritis!
+                      PERINGATAN BAHAYA: Beda Tekanan (ΔP) Kritis!
                       {supabaseControls.uap_status && (
                         <span className="text-[10px] font-black bg-emerald-500 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                           Katup Uap Aktif Terbuka
@@ -3417,7 +3537,7 @@ export default function FluidHEDashboard() {
                     <p className="text-xs text-red-100 font-medium mt-0.5">
                       {supabaseControls.uap_status
                         ? 'Katup uap telah dibuka untuk membuang tekanan & uap panas. Pantau penurunan sensor.'
-                        : 'Harap Buka Katup Uap Sekarang! Tekanan terdeteksi > 2.0 Bar atau Suhu > 65°C.'}
+                        : `Harap Buka Katup Uap Sekarang! Nilai beda tekanan terdeteksi ΔP > ${(deltaPMaxThreshold || 2.0).toFixed(1)} atm-g (Saat ini: ${currentDeltaP.toFixed(2)} atm-g).`}
                     </p>
                   </div>
                 </div>
@@ -3472,7 +3592,7 @@ export default function FluidHEDashboard() {
             </div>
           )}
 
-          {(activeTab === 'dashboard' || activeTab === 'control') && show1MinWarning && (
+          {(activeTab === 'dashboard' || activeTab === 'control') && show1MinWarning && isHardwareOnline && (
             <div className="no-print print:hidden p-4 bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50/50 border border-sky-300 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs text-sky-950 shadow-sm animate-fade-in">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-sky-100 text-sky-700 border border-sky-200 shrink-0">
@@ -3509,6 +3629,7 @@ export default function FluidHEDashboard() {
                 fc1Valve={supabaseControls?.servo_angle !== undefined ? supabaseControls.servo_angle : fc1Valve}
                 fc2Valve={supabaseControls?.servo_angle_2 !== undefined ? supabaseControls.servo_angle_2 : fc2Valve}
                 onCardClick={() => setActiveTab('control')}
+                isHardwareOnline={isHardwareOnline}
               />
 
               {/* 2. Real-Time Temperature & Pressure Multi-Line Chart */}
@@ -3588,7 +3709,7 @@ export default function FluidHEDashboard() {
 
                     <div className="flex items-center gap-2">
                       <strong className="text-xs font-bold text-slate-900">
-                        {syncFeedback.active ? syncFeedback.message : 'Sinkronisasi IoT Cloud (ESP32)'}
+                        {syncFeedback.active ? syncFeedback.message : 'Sinkronisasi Data Otomatis'}
                       </strong>
                       {syncFeedback.active && (
                         <span className={`px-2 py-0.5 rounded-full text-[9.5px] font-extrabold uppercase tracking-wider ${syncFeedback.type === 'syncing'
@@ -3647,6 +3768,7 @@ export default function FluidHEDashboard() {
                   supabaseTelemetry={supabaseTelemetry}
                   latestData={latestData}
                   dualHeaterState={dualHeaterState}
+                  isHardwareOnline={isHardwareOnline}
                 />
 
                 {/* 2. Unified Control Command Inputs */}
@@ -3675,7 +3797,7 @@ export default function FluidHEDashboard() {
                           onClick={() => {
                             handleControlModeChange('AUTO');
                             setOperationMode('Counter-Current');
-                            triggerSyncFeedback('Mode Operasi AUTO', 'ESP32 Mengelola Heater & Katup Otomatis');
+                            triggerSyncFeedback('Mode Operasi AUTO', 'Sistem Mengelola Heater & Katup Otomatis');
                           }}
                           disabled={emergencyStopped}
                           className={`py-2 sm:py-3 px-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${supabaseControls.control_mode === 'AUTO'
@@ -3958,7 +4080,6 @@ export default function FluidHEDashboard() {
               handleExportCurrentSessionExcel={handleExportCurrentSessionExcel}
               handleExportAllClassesExcel={handleExportAllClassesExcel}
               handleCloudDriveAccess={handleCloudDriveAccess}
-              exportPDFReport={exportPDFReport}
               systemStatus={systemState}
               currentSession={currentSession}
               archivedSessions={archivedSessions}
@@ -3969,6 +4090,7 @@ export default function FluidHEDashboard() {
               classFilter={classFilter}
               setClassFilter={setClassFilter}
               classesList={classesList}
+              onClearActiveSession={handleClearActiveSession}
             />
           )}
 
@@ -4029,11 +4151,16 @@ export default function FluidHEDashboard() {
               currentSession={currentSession}
               onRefreshSessions={() => fetchSessions(currentUser.role, currentUser.email, classFilter)}
               onSelectSessionForLogs={(sessionId) => {
-                setSelectedLogsSessionId(sessionId);
+                if (currentSession && sessionId === currentSession.id) {
+                  setSelectedLogsSessionId('CURRENT');
+                } else {
+                  setSelectedLogsSessionId(sessionId);
+                }
                 setActiveTab('logs');
               }}
               onExportMasterExcel={handleExportAllClassesExcel}
               onExportSessionExcel={handleExportCurrentSessionExcel}
+              onClearActiveSession={handleClearActiveSession}
             />
           )}
 
@@ -4340,20 +4467,20 @@ export default function FluidHEDashboard() {
 
       {/* ─── MOBILE BOTTOM TAB NAVIGATION BAR (SMARTPHONE FRIENDLY & HIGH TOUCH PRIORITY) ─── */}
       {systemState === 'ACTIVE' && (
-        <nav className="fixed bottom-0 inset-x-0 z-50 bg-white/98 backdrop-blur-md border-t border-slate-200/90 py-1 px-1.5 flex md:hidden justify-around items-center shadow-[0_-4px_25px_rgba(0,0,0,0.10)] no-print touch-manipulation select-none pointer-events-auto">
+        <nav className="fixed bottom-0 inset-x-0 z-50 bg-white/98 backdrop-blur-md border-t border-slate-200/90 py-1.5 px-2 flex md:hidden justify-between items-center shadow-[0_-4px_25px_rgba(0,0,0,0.10)] no-print touch-manipulation select-none pointer-events-auto">
           <button
             type="button"
             onClick={() => {
               setActiveTab('dashboard');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'dashboard'
-              ? 'text-sky-600 font-extrabold bg-sky-50/80'
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'dashboard'
+              ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
               : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
               }`}
           >
-            <Activity className="w-5 h-5 shrink-0" />
-            <span className="text-[10px]">Monitoring</span>
+            <Activity className="w-4.5 h-4.5 shrink-0" />
+            <span className="text-[9.5px] leading-none truncate w-full text-center">Monitoring</span>
           </button>
 
           <button
@@ -4362,13 +4489,13 @@ export default function FluidHEDashboard() {
               setActiveTab('control');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'control'
-              ? 'text-sky-600 font-extrabold bg-sky-50/80'
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'control'
+              ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
               : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
               }`}
           >
-            <Sliders className="w-5 h-5 shrink-0" />
-            <span className="text-[10px]">Kontrol</span>
+            <Sliders className="w-4.5 h-4.5 shrink-0" />
+            <span className="text-[9.5px] leading-none truncate w-full text-center">Kontrol</span>
           </button>
 
           <button
@@ -4377,13 +4504,13 @@ export default function FluidHEDashboard() {
               setActiveTab('logs');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'logs'
-              ? 'text-sky-600 font-extrabold bg-sky-50/80'
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'logs'
+              ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
               : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
               }`}
           >
-            <FileText className="w-5 h-5 shrink-0" />
-            <span className="text-[10px]">Laporan</span>
+            <FileText className="w-4.5 h-4.5 shrink-0" />
+            <span className="text-[9.5px] leading-none truncate w-full text-center">Laporan</span>
           </button>
 
           {currentUser.role === 'admin' ? (
@@ -4394,13 +4521,13 @@ export default function FluidHEDashboard() {
                   setActiveTab('sessions');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'sessions'
-                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'sessions'
+                  ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
                   : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
                   }`}
               >
-                <FolderKanban className="w-5 h-5 shrink-0" />
-                <span className="text-[10px]">Data Lab</span>
+                <FolderKanban className="w-4.5 h-4.5 shrink-0" />
+                <span className="text-[9.5px] leading-none truncate w-full text-center">Data Lab</span>
               </button>
 
               <button
@@ -4409,13 +4536,13 @@ export default function FluidHEDashboard() {
                   setActiveTab('cctv');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'cctv'
-                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'cctv'
+                  ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
                   : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
                   }`}
               >
-                <Video className="w-5 h-5 shrink-0" />
-                <span className="text-[10px]">CCTV</span>
+                <Video className="w-4.5 h-4.5 shrink-0" />
+                <span className="text-[9.5px] leading-none truncate w-full text-center">CCTV</span>
               </button>
 
               <button
@@ -4424,13 +4551,13 @@ export default function FluidHEDashboard() {
                   setActiveTab('users');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'users'
-                  ? 'text-sky-600 font-extrabold bg-sky-50/80'
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'users'
+                  ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
                   : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
                   }`}
               >
-                <Users className="w-5 h-5 shrink-0" />
-                <span className="text-[10px]">Users</span>
+                <Users className="w-4.5 h-4.5 shrink-0" />
+                <span className="text-[9.5px] leading-none truncate w-full text-center">Users</span>
               </button>
             </>
           ) : (
@@ -4440,13 +4567,18 @@ export default function FluidHEDashboard() {
                 setActiveTab('alarms');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 cursor-pointer ${activeTab === 'alarms'
-                ? 'text-sky-600 font-extrabold bg-sky-50/80'
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'alarms'
+                ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
                 : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
                 }`}
             >
-              <Bell className="w-5 h-5 shrink-0" />
-              <span className="text-[10px]">Alarm</span>
+              <div className="relative">
+                <Bell className="w-4.5 h-4.5 shrink-0" />
+                {alarmLogs.some(a => !a.acknowledged) && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                )}
+              </div>
+              <span className="text-[9.5px] leading-none truncate w-full text-center">Alarm</span>
             </button>
           )}
         </nav>
@@ -4547,10 +4679,10 @@ export default function FluidHEDashboard() {
 
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between hover:bg-slate-100/80 transition">
                     <div className="flex items-center gap-3">
-                      <FileText className="w-5 h-5 text-sky-600 shrink-0" />
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600 shrink-0" />
                       <div>
-                        <div className="font-bold text-slate-800">HE_Daily_Thermal_Analytics_Report.pdf</div>
-                        <div className="text-[10px] text-slate-400">Ringkasan Grafik & Status Aktuator</div>
+                        <div className="font-bold text-slate-800">HE_Master_Class_Dataset.xlsx</div>
+                        <div className="text-[10px] text-slate-400">Ringkasan Data & Nilai LMTD Semua Kelas</div>
                       </div>
                     </div>
                     <span className="px-2 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg flex items-center gap-1">

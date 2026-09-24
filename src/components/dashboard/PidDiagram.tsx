@@ -54,6 +54,7 @@ interface PidDiagramProps {
   solenoidValves?: SolenoidValvesState;
   deltaPHot: number;
   onHoverSensor?: (sensorId: string | null) => void;
+  isHardwareOnline?: boolean;
 }
 
 export const PidDiagram: React.FC<PidDiagramProps> = ({
@@ -69,7 +70,8 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
   pompaStatus = false,
   dualHeaterState,
   deltaPHot,
-  onHoverSensor
+  onHoverSensor,
+  isHardwareOnline = false
 }) => {
   const [hoveredComponent, setHoveredComponent] = useState<string | null>(null);
   const [showLegend, setShowLegend] = useState<boolean>(false);
@@ -97,6 +99,19 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
   const flow1Val = Number(latestData.fc1 || 0).toFixed(1);
   const flow2Val = Number(latestData.fc2 || 0).toFixed(1);
 
+  // Formatted String Display (Mencegah tampilan nilai fiktif/basi saat ESP32 Offline)
+  const thiStr = isHardwareOnline ? `${thi}°C` : '--';
+  const tcoStr = isHardwareOnline ? `${tco}°C` : '--';
+  const tciStr = isHardwareOnline ? `${tci}°C` : '--';
+  const t4Str = isHardwareOnline ? `${Number(latestData.ti4 || 0).toFixed(1)}°C` : '--';
+  const pi1Str = isHardwareOnline ? `${pi1Val} atm` : '--';
+  const pi2Str = isHardwareOnline ? `${pi2Val} atm` : '--';
+  const pi3Str = isHardwareOnline ? `${pi3Val} atm` : '--';
+  const pi4Str = isHardwareOnline ? `${pi4Val} atm` : '--';
+  const flow1Str = isHardwareOnline ? `${flow1Val} L/m` : '--';
+  const flow2Str = isHardwareOnline ? `${flow2Val} L/m` : '--';
+  const deltaPHotStr = isHardwareOnline ? `${deltaPHot} atm` : '--';
+
   const lmtdVal = calculateLMTD(thi, tho, tci, tco, isCounter);
 
   const h1Active = dualHeaterState.h1 ?? dualHeaterState.heater1Active ?? false;
@@ -111,7 +126,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
   const isColdFlowActive = !emergencyStopped && (airDinginStatus ?? true);
 
   return (
-    <div className="bg-gradient-to-b from-slate-50/95 to-slate-100/95 rounded-2xl sm:rounded-3xl border border-slate-200/90 p-3 sm:p-5 space-y-4 relative overflow-hidden shadow-sm">
+    <div className="bg-gradient-to-b from-slate-50/95 to-slate-100/95 rounded-2xl sm:rounded-3xl border border-slate-200/90 p-3 sm:p-5 flex flex-col gap-3 sm:gap-4 relative overflow-hidden shadow-sm">
       {/* ─── SCADA HEADER BAR ─── */}
       <div className="flex flex-wrap justify-between items-center gap-2 pb-3 border-b border-slate-200/80">
         <div className="flex items-center gap-2.5">
@@ -164,7 +179,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
       </div>
 
       {/* ─── INTERACTIVE DIGITAL TWIN P&ID SVG SCHEMATIC (BERSIH & SESUAI SKETSA) ─── */}
-      <div className="w-full overflow-x-auto py-2 bg-white rounded-2xl border border-slate-200/90 p-2 sm:p-4 shadow-inner">
+      <div className="order-1 w-full overflow-x-auto py-2 bg-white rounded-2xl border border-slate-200/90 p-2 sm:p-4 shadow-inner">
         <svg viewBox="0 0 1120 520" className="w-full h-auto min-w-[920px] font-sans select-none">
           <defs>
             {/* Metallic Gradients */}
@@ -267,7 +282,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
 
             <rect x="70" y="156" width="55" height="16" rx="3" fill="#FFFFFF" stroke="#FDE68A" strokeWidth="1" />
             <text x="97" y="167" textAnchor="middle" className="text-[8px] font-black fill-amber-900">
-              {thi ? `${(thi * 0.95).toFixed(1)}°C` : 'Standby'}
+              {isHardwareOnline && thi ? `${(thi * 0.95).toFixed(1)}°C` : 'Standby'}
             </text>
           </g>
 
@@ -350,7 +365,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="242" y="159" width="36" height="32" rx="6" fill="#F97316" stroke="#C2410C" strokeWidth="1.5" />
             <rect x="246" y="164" width="28" height="15" rx="3" fill="#FFFFFF" />
             <text x="260" y="174" textAnchor="middle" className="text-[7.5px] font-black fill-slate-800">
-              {flow1Val} L/m
+              {flow1Str}
             </text>
             <text x="260" y="187" textAnchor="middle" className="text-[6px] font-bold fill-white">
               flow control
@@ -674,13 +689,13 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="278" y="197" width="56" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="288" cy="205" r="10" fill="#0EA5E9" />
             <text x="288" y="207.5" textAnchor="middle" className="text-[7px] font-bold fill-white">P2</text>
-            <text x="313" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi2Val} atm</text>
+            <text x="313" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi2Str}</text>
 
             {/* T2 (Termostat Nozzle) — 2D Pill style */}
             <rect x="348" y="197" width="54" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="358" cy="205" r="10" fill="#0284C7" />
             <text x="358" y="207.5" textAnchor="middle" className="text-[7px] font-bold fill-white">T2</text>
-            <text x="381" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tco}°C</text>
+            <text x="381" y="207" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tcoStr}</text>
           </g>
 
           {/* ═══════════════════════════════════════════════════════════════════════════
@@ -739,7 +754,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="174" y="335" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="194" cy="343" r="10" fill="#0EA5E9" />
             <text x="194" y="345.5" textAnchor="middle" className="text-[7px] font-bold fill-white">P1</text>
-            <text x="194" y="360" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi1Val} atm</text>
+            <text x="194" y="360" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi1Str}</text>
           </g>
 
           {/* Tr T1 — 2D Pill style di atas pipa hijau, garis penunjuk menembus ke pipa biru sesuai gambar */}
@@ -749,7 +764,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="192" y="239" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="212" cy="247" r="10" fill="#EF4444" />
             <text x="212" y="249.5" textAnchor="middle" className="text-[7px] font-bold fill-white">T1</text>
-            <text x="212" y="233" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{thi}°C</text>
+            <text x="212" y="233" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{thiStr}</text>
           </g>
 
           {/* ═══════════════════════════════════════════════════════════════════════════
@@ -777,7 +792,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="786" y="335" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="806" cy="343" r="10" fill="#0EA5E9" />
             <text x="806" y="345.5" textAnchor="middle" className="text-[7px] font-bold fill-white">P4</text>
-            <text x="806" y="360" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi4Val} atm</text>
+            <text x="806" y="360" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi4Str}</text>
           </g>
 
           {/* Tr T4 — Di atas pipa hijau dengan garis penunjuk menembus ke pipa biru sesuai Gambar 1 */}
@@ -787,7 +802,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="810" y="239" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="830" cy="247" r="10" fill="#EF4444" />
             <text x="830" y="249.5" textAnchor="middle" className="text-[7px] font-bold fill-white">T4</text>
-            <text x="830" y="233" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{Number(latestData.ti4 || 0).toFixed(1)}°C</text>
+            <text x="830" y="233" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{t4Str}</text>
           </g>
 
           {/* VL Kanan — Katup VL di titik x=860 sesuai Gambar 1 */}
@@ -859,7 +874,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="797" y="404" width="40" height="32" rx="6" fill="#F97316" stroke="#C2410C" strokeWidth="1.5" />
             <rect x="802" y="409" width="30" height="15" rx="3" fill="#FFFFFF" />
             <text x="817" y="419" textAnchor="middle" className="text-[7.5px] font-black fill-slate-800">
-              {flow2Val} L/m
+              {flow2Str}
             </text>
             <text x="817" y="432" textAnchor="middle" className="text-[6px] font-bold fill-white">
               flow control
@@ -872,7 +887,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="750" y="379" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="770" cy="387" r="10" fill="#9333EA" />
             <text x="770" y="389.5" textAnchor="middle" className="text-[7px] font-bold fill-white">T3</text>
-            <text x="770" y="373" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tci}°C</text>
+            <text x="770" y="373" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{tciStr}</text>
           </g>
 
           {/* Presur (P3) Air Dingin — 2D Pill style */}
@@ -881,7 +896,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <rect x="715" y="445" width="40" height="16" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" filter="url(#softShadow)" />
             <circle cx="735" cy="453" r="10" fill="#0284C7" />
             <text x="735" y="455.5" textAnchor="middle" className="text-[7px] font-bold fill-white">P3</text>
-            <text x="735" y="470" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi3Val} atm</text>
+            <text x="735" y="470" textAnchor="middle" className="text-[6.5px] font-bold fill-slate-700">{pi3Str}</text>
           </g>
 
           {/* ═══════════════════════════════════════════════════════════════════════════
@@ -890,14 +905,14 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
           <g className="cursor-pointer">
             <rect x="445" y="488" width="150" height="20" rx="4" fill="#EFF6FF" stroke="#3B82F6" strokeWidth="1" filter="url(#softShadow)" />
             <text x="520" y="502" textAnchor="middle" className="text-[8.5px] font-black fill-blue-900">
-              ΔP Hot (P1 - P2) = {deltaPHot} atm
+              ΔP Hot (P1 - P2) = {deltaPHotStr}
             </text>
           </g>
         </svg>
       </div>
 
-      {/* ─── KETERANGAN SINGKATAN SENSOR & KOMPONEN (ON-DEMAND TOGGLE) ─── */}
-      <div className="space-y-2">
+      {/* ─── KETERANGAN SINGKATAN SENSOR & KOMPONEN (ON-DEMAND TOGGLE - KHUSUS MOBILE DI BAWAH KINERJA) ─── */}
+      <div className="order-3 md:order-2 space-y-2">
         <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50/90 hover:bg-slate-100/90 rounded-xl border border-slate-200/90 transition shadow-2xs">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
             <Info className="w-4 h-4 text-sky-600 shrink-0" />
@@ -988,7 +1003,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
       </div>
 
       {/* ─── THERMAL PERFORMANCE KPIS (LMTD & ΔT) ─── */}
-      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2">
+      <div className="order-2 md:order-3 p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2">
         <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 px-0.5">
           <span className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-sky-600" />
@@ -1005,7 +1020,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <div>
               <span className="text-[9.5px] font-bold text-slate-500 block">ΔT Hot (Pelepasan):</span>
               <strong className="text-slate-800 font-black text-xs sm:text-sm">
-                {(thi - tho).toFixed(1)} °C
+                {isHardwareOnline ? `${(thi - tho).toFixed(1)} °C` : '--'}
               </strong>
             </div>
           </div>
@@ -1017,7 +1032,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <div>
               <span className="text-[9.5px] font-bold text-slate-500 block">ΔT Cold (Penyerapan):</span>
               <strong className="text-sky-700 font-black text-xs sm:text-sm">
-                {Math.abs(tco - tci).toFixed(1)} °C
+                {isHardwareOnline ? `${Math.abs(tco - tci).toFixed(1)} °C` : '--'}
               </strong>
             </div>
           </div>
@@ -1029,7 +1044,7 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             <div>
               <span className="text-[9.5px] font-bold text-slate-500 block">LMTD ({diagramMode}):</span>
               <strong className="text-slate-800 font-black text-xs sm:text-sm">
-                {lmtdVal.toFixed(2)} °C
+                {isHardwareOnline ? `${lmtdVal.toFixed(2)} °C` : '--'}
               </strong>
             </div>
           </div>
@@ -1040,8 +1055,8 @@ export const PidDiagram: React.FC<PidDiagramProps> = ({
             </div>
             <div>
               <span className="text-[9.5px] font-bold text-slate-500 block">Status Operasi:</span>
-              <span className="inline-block font-black text-[9.5px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Rig Active
+              <span className={`inline-block font-black text-[9.5px] px-2 py-0.5 rounded border ${isHardwareOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                {isHardwareOnline ? 'Rig Active' : 'Standby (Offline)'}
               </span>
             </div>
           </div>

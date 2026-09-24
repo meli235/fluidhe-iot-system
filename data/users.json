@@ -6,7 +6,7 @@
       "email": "anugrahtriplecycle@gmail.com",
       "role": "admin",
       "status": "Active",
-      "lastLogin": "2026-09-17T08:28:00.707Z",
+      "lastLogin": "2026-09-24T04:17:16.383Z",
       "isScheduleRestricted": false,
       "allowedStartDate": "2026-08-26",
       "allowedEndDate": "2026-08-31",
@@ -19,7 +19,7 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1789635908260
+      "lastSeen": 1790231975358
     },
     {
       "id": "USR-02",
@@ -27,7 +27,7 @@
       "email": "dwimeliantiistiqomah55@gmail.com",
       "role": "operator",
       "status": "Active",
-      "lastLogin": "2026-09-17T07:13:46.388Z",
+      "lastLogin": "2026-09-24T04:15:57.856Z",
       "isScheduleRestricted": false,
       "allowedStartDate": "2026-09-05",
       "allowedEndDate": "2026-09-05",
@@ -38,7 +38,7 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1789634826311
+      "lastSeen": 0
     },
     {
       "id": "USR-04",

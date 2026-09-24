@@ -72,7 +72,7 @@ export function useSupabaseIntegration() {
 
     try {
       // 1. Fetch initial telemetry
-      const { data: initialTelemetry, error: telemetryErr } = await fetchLatestTelemetry(20);
+      const { data: initialTelemetry, error: telemetryErr } = await fetchLatestTelemetry(1000);
       if (telemetryErr) {
         if (telemetryErr.message.includes('Invalid API key') || telemetryErr.message.includes('apiKey') || telemetryErr.message.includes('Unregistered API key')) {
           setErrorMessage('Supabase Anon Key belum terdaftar di project Supabase ini. Silakan masukkan Public Anon Key (JWT starting with eyJhb...) dari Supabase Dashboard ➔ Project Settings ➔ API.');
@@ -136,18 +136,36 @@ export function useSupabaseIntegration() {
 
     // Polling Interval Fallback (Setiap 2 Detik) untuk Menjamin Update Real-Time Selalu Tampak
     const pollInterval = setInterval(() => {
-      fetchLatestTelemetry(20).then(({ data, error }) => {
+      fetchLatestTelemetry(500).then(({ data, error }) => {
         if (!error && data && data.length > 0) {
-          setTelemetryStream(data);
+          setTelemetryStream((prev) => {
+            if (prev.length === 0) return data;
+            const existingMap = new Map<string | number, TelemetryRow>();
+            prev.forEach((r) => {
+              const k = r.id ?? r.created_at;
+              if (k) existingMap.set(k, r);
+            });
+            data.forEach((r) => {
+              const k = r.id ?? r.created_at;
+              if (k) existingMap.set(k, r);
+            });
+            const merged = Array.from(existingMap.values());
+            merged.sort((a, b) => {
+              const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+              const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+              return timeA - timeB;
+            });
+            return merged.slice(-1500);
+          });
           const latest = data[data.length - 1];
           setLatestTelemetry(latest);
           setConnectionStatus('ONLINE');
           setErrorMessage(null);
 
-          // Check if latest telemetry row was produced recently (< 15 seconds)
+          // Check if latest telemetry row was produced recently (tolerance 120 seconds to handle network latency & clock drift)
           if (latest.created_at) {
             const rowTime = new Date(latest.created_at).getTime();
-            if (!isNaN(rowTime) && (Date.now() - rowTime < 15000)) {
+            if (!isNaN(rowTime) && Math.abs(Date.now() - rowTime) < 120000) {
               setLastHardwareHeartbeat(Date.now());
               setIsHardwareOnline(true);
             }
@@ -194,8 +212,8 @@ export function useSupabaseIntegration() {
             };
           });
 
-          // Check if updated_at is within last 15 seconds
-          if ((data as any).updated_at) {
+          // Check if updated_at is within last 15 seconds and NOT recently modified by web user
+          if (!isRecentlyUpdatedByUser && (data as any).updated_at) {
             const updateTime = new Date((data as any).updated_at).getTime();
             if (!isNaN(updateTime) && (Date.now() - updateTime < 15000)) {
               setLastHardwareHeartbeat(Date.now());
@@ -216,8 +234,10 @@ export function useSupabaseIntegration() {
           const newRow = payload.new as TelemetryRow;
           setLatestTelemetry(newRow);
           setTelemetryStream((prev) => {
+            const exists = prev.some((r) => (r.id && newRow.id && r.id === newRow.id) || (r.created_at && newRow.created_at && r.created_at === newRow.created_at));
+            if (exists) return prev;
             const updated = [...prev, newRow];
-            return updated.slice(-30);
+            return updated.slice(-1500);
           });
           setConnectionStatus('ONLINE');
           setLastHardwareHeartbeat(Date.now());
@@ -275,8 +295,14 @@ export function useSupabaseIntegration() {
               };
             });
             setConnectionStatus('ONLINE');
-            setLastHardwareHeartbeat(Date.now());
-            setIsHardwareOnline(true);
+            if (!isRecentlyUpdatedByUser) {
+              const updatedAtStr = (updatedControls as any).updated_at;
+              const updateTime = updatedAtStr ? new Date(updatedAtStr).getTime() : Date.now();
+              if (!isNaN(updateTime) && (Date.now() - updateTime < 15000)) {
+                setLastHardwareHeartbeat(Date.now());
+                setIsHardwareOnline(true);
+              }
+            }
           }
         }
       )
@@ -289,10 +315,10 @@ export function useSupabaseIntegration() {
     };
   }, [initializeData]);
 
-  // Periodic heartbeat watchdog to mark hardware offline if no packet for > 12s
+  // Periodic heartbeat watchdog to mark hardware offline if no packet for > 45s
   useEffect(() => {
     const watchdog = setInterval(() => {
-      if (lastHardwareHeartbeat && (Date.now() - lastHardwareHeartbeat < 12000)) {
+      if (lastHardwareHeartbeat && (Date.now() - lastHardwareHeartbeat < 45000)) {
         setIsHardwareOnline(true);
       } else {
         setIsHardwareOnline(false);

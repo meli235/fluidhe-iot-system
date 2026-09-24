@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   Users,
   GraduationCap,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import { SystemOperationalStatus, SystemSession, TelemetryPoint } from '@/types';
 import { ExportButtons } from './ExportButtons';
@@ -37,7 +38,6 @@ export interface LogsTabProps {
   handleExportCurrentSessionExcel?: () => void;
   handleExportAllClassesExcel?: () => void;
   handleCloudDriveAccess: () => void;
-  exportPDFReport: () => void;
   // Session Isolation Props
   systemStatus?: SystemOperationalStatus;
   currentSession?: SystemSession | null;
@@ -50,6 +50,7 @@ export interface LogsTabProps {
   classFilter?: string;
   setClassFilter?: (filter: string) => void;
   classesList?: ClassSummaryItem[];
+  onClearActiveSession?: () => void;
 }
 
 export const LogsTab: React.FC<LogsTabProps> = ({
@@ -65,7 +66,6 @@ export const LogsTab: React.FC<LogsTabProps> = ({
   handleExportCurrentSessionExcel,
   handleExportAllClassesExcel,
   handleCloudDriveAccess,
-  exportPDFReport,
   systemStatus = 'ACTIVE',
   currentSession,
   archivedSessions = [],
@@ -75,27 +75,44 @@ export const LogsTab: React.FC<LogsTabProps> = ({
   currentUser,
   classFilter = 'ALL',
   setClassFilter,
-  classesList = []
+  classesList = [],
+  onClearActiveSession
 }) => {
   const isAdmin = currentUser?.role === 'admin';
 
   // Filter archived sessions based on classFilter for Admin
   const visibleArchivedSessions = useMemo(() => {
-    if (!isAdmin || classFilter === 'ALL') {
-      return archivedSessions;
+    let list = archivedSessions;
+    if (currentSession) {
+      list = list.filter((s) => s.id !== currentSession.id);
     }
-    return archivedSessions.filter(
+    if (!isAdmin || classFilter === 'ALL') {
+      return list;
+    }
+    return list.filter(
       (s) =>
         (s.operatorEmail && s.operatorEmail.toLowerCase() === classFilter.toLowerCase()) ||
         (s.classGroup && s.classGroup.toLowerCase() === classFilter.toLowerCase()) ||
         (s.operatorName && s.operatorName.toLowerCase() === classFilter.toLowerCase())
     );
-  }, [isAdmin, classFilter, archivedSessions]);
+  }, [isAdmin, classFilter, archivedSessions, currentSession]);
 
-  // Total telemetry points calculation for Admin Master Badge
+  // Deduplikasi total sesi unik
+  const totalUniqueSessionsCount = useMemo(() => {
+    const idSet = new Set<string>();
+    archivedSessions.forEach((s) => { if (s?.id) idSet.add(s.id); });
+    if (currentSession?.id) idSet.add(currentSession.id);
+    return idSet.size;
+  }, [archivedSessions, currentSession]);
+
+  // Total telemetry points calculation for Admin Master Badge (hindari duplikasi jika sesi aktif sudah ada di arsip)
   const totalTelemetryCount = useMemo(() => {
+    const currentId = currentSession?.id;
     const fromArchives = archivedSessions.reduce(
-      (acc, s) => acc + (s.pointsCount || (s.data ? s.data.length : 0)),
+      (acc, s) => {
+        if (currentId && s.id === currentId) return acc;
+        return acc + (s.pointsCount || (s.data ? s.data.length : 0));
+      },
       0
     );
     const fromCurrent = currentSession?.data ? currentSession.data.length : 0;
@@ -104,7 +121,8 @@ export const LogsTab: React.FC<LogsTabProps> = ({
 
   // Selected session object for banner detail
   const activeSessionObj = useMemo(() => {
-    if (selectedSessionId === 'CURRENT') return currentSession;
+    const isCurrentSelected = selectedSessionId === 'CURRENT' || (currentSession && selectedSessionId === currentSession.id);
+    if (isCurrentSelected) return currentSession;
     return archivedSessions.find((s) => s.id === selectedSessionId) || null;
   }, [selectedSessionId, currentSession, archivedSessions]);
 
@@ -129,7 +147,6 @@ export const LogsTab: React.FC<LogsTabProps> = ({
             onExportExcel={handleExportCurrentSessionExcel || handleExportAndUpload}
             onExportMasterExcel={handleExportAllClassesExcel}
             onCloudDriveAccess={handleCloudDriveAccess}
-            onExportPDFReport={exportPDFReport}
             isAdmin={isAdmin}
           />
         </div>
@@ -137,40 +154,40 @@ export const LogsTab: React.FC<LogsTabProps> = ({
         {/* ROLE-BASED ACCESS BANNER */}
         {isAdmin ? (
           /* ADMIN MASTER DATA BANNER */
-          <div className="no-print print:hidden mb-6 p-4 rounded-2xl bg-gradient-to-r from-sky-50 via-blue-50/70 to-indigo-50/50 border border-sky-200/80 text-sky-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
-            <div className="flex items-center gap-3.5">
-              <div className="p-2.5 bg-sky-600 text-white rounded-2xl shadow-xs shrink-0">
-                <Database className="w-5 h-5" />
+          <div className="no-print print:hidden mb-4 sm:mb-6 p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-sky-50 via-blue-50/70 to-indigo-50/50 border border-sky-200/80 text-sky-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 shadow-xs">
+            <div className="flex items-center gap-2.5 sm:gap-3.5">
+              <div className="p-2 sm:p-2.5 bg-sky-600 text-white rounded-2xl shadow-xs shrink-0 flex items-center justify-center">
+                <Database className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <strong className="text-xs font-black text-sky-950 tracking-wide uppercase">
                     Data Berkepanjangan Laboratorium (Master Admin)
                   </strong>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-200/80 text-sky-900 border border-sky-300">
+                  <span className="hidden md:inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-200/80 text-sky-900 border border-sky-300">
                     Akses Seluruh Kelas
                   </span>
                 </div>
-                <p className="text-[11.5px] text-sky-800 mt-0.5">
+                <p className="hidden md:block text-[11.5px] text-sky-800 mt-0.5">
                   Seluruh rekaman telemetri dari semua kelas dan kelompok tersimpan permanen di server untuk kebutuhan arsip kurikulum dan riset jangka panjang.
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <div className="px-3 py-1.5 bg-white/90 rounded-xl border border-sky-200 text-center shadow-xs">
-                <span className="text-[10px] font-bold text-slate-500 block">Total Sesi Kelas</span>
-                <span className="text-xs font-black text-sky-900">
-                  {archivedSessions.length + (currentSession ? 1 : 0)} Sesi
+            <div className="grid grid-cols-3 gap-1.5 w-full md:w-auto md:flex md:flex-wrap md:items-center md:gap-2 shrink-0">
+              <div className="px-1.5 py-1.5 sm:px-3 sm:py-1.5 bg-white/95 rounded-xl border border-sky-200 text-center shadow-xs min-w-0 flex flex-col justify-center">
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate">Total Sesi</span>
+                <span className="text-[11.5px] sm:text-xs font-black text-sky-900 truncate">
+                  {totalUniqueSessionsCount} Sesi
                 </span>
               </div>
-              <div className="px-3 py-1.5 bg-white/90 rounded-xl border border-sky-200 text-center shadow-xs">
-                <span className="text-[10px] font-bold text-slate-500 block">Akumulasi Data</span>
-                <span className="text-xs font-black text-sky-900">{totalTelemetryCount} Baris</span>
+              <div className="px-1.5 py-1.5 sm:px-3 sm:py-1.5 bg-white/95 rounded-xl border border-sky-200 text-center shadow-xs min-w-0 flex flex-col justify-center">
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate">Akumulasi Data</span>
+                <span className="text-[11.5px] sm:text-xs font-black text-sky-900 truncate">{totalTelemetryCount} Baris</span>
               </div>
-              <div className="px-3 py-1.5 bg-white/90 rounded-xl border border-sky-200 text-center shadow-xs">
-                <span className="text-[10px] font-bold text-slate-500 block">Kelas Terdata</span>
-                <span className="text-xs font-black text-sky-900">
+              <div className="px-1.5 py-1.5 sm:px-3 sm:py-1.5 bg-white/95 rounded-xl border border-sky-200 text-center shadow-xs min-w-0 flex flex-col justify-center">
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate">Kelas Terdata</span>
+                <span className="text-[11.5px] sm:text-xs font-black text-sky-900 truncate">
                   {classesList.length > 0 ? classesList.length : 1} Kelas
                 </span>
               </div>
@@ -196,7 +213,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
             <div className="px-3 py-1.5 bg-white rounded-xl border border-slate-200 text-center shadow-xs shrink-0">
               <span className="text-[10px] font-bold text-slate-500 block">Total Sesi</span>
               <span className="text-xs font-black text-slate-900">
-                {archivedSessions.length + (currentSession ? 1 : 0)} Sesi
+                {totalUniqueSessionsCount} Sesi
               </span>
             </div>
           </div>
@@ -247,13 +264,30 @@ export const LogsTab: React.FC<LogsTabProps> = ({
               )}
             </div>
 
-            <div>
-              {selectedSessionId === 'CURRENT' && currentSession ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  Sesi Aktif: {currentSession.id}
-                </span>
-              ) : selectedSessionId !== 'CURRENT' ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {(selectedSessionId === 'CURRENT' || (currentSession && selectedSessionId === currentSession.id)) && currentSession ? (
+                <>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    Sesi Aktif: {currentSession.id}
+                  </span>
+                  {isAdmin && onClearActiveSession && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Hapus dan kosongkan rekaman Sesi Aktif (${currentSession.id}) ini beserta seluruh data sensornya secara permanen?`)) {
+                          onClearActiveSession();
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer active:scale-95"
+                      title="Hapus dan kosongkan sesi aktif beserta seluruh data sensornya secara permanen"
+                    >
+                      <Trash2 className="w-3 h-3 text-rose-600" />
+                      Kosongkan Sesi Aktif
+                    </button>
+                  )}
+                </>
+              ) : (selectedSessionId !== 'CURRENT' && selectedSessionId !== currentSession?.id) ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-extrabold bg-sky-100 text-sky-800 border border-sky-300">
                   <CheckCircle2 className="w-3.5 h-3.5 text-sky-600" />
                   Arsip Sesi: {selectedSessionId}
@@ -273,7 +307,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
             Rentang Data:{' '}
             <strong className="text-slate-800">
               {filteredLogsData.length > 0
-                ? `${activeSessionObj?.date || new Date().toLocaleDateString('id-ID')}, ${filteredLogsData[0]?.timestamp} WIB s.d. ${filteredLogsData[filteredLogsData.length - 1]?.timestamp} WIB`
+                ? `${activeSessionObj?.date || new Date().toLocaleDateString('id-ID')}, ${filteredLogsData[0]?.timestamp} WIB s.d. ${filteredLogsData[filteredLogsData.length - 1]?.timestamp} WIB (${filteredLogsData.length} baris telemetri)`
                 : `Tidak ada data log (${dateFilter === 'Yesterday' ? 'Kemarin' : dateFilter === '7Days' ? '7 Hari Terakhir' : 'Kriteria Pencarian'})`}
             </strong>
           </p>
@@ -330,7 +364,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
               Pilih Sesi Praktikum
             </label>
             <select
-              value={selectedSessionId}
+              value={(currentSession && selectedSessionId === currentSession.id) ? 'CURRENT' : selectedSessionId}
               onChange={(e) => setSelectedSessionId?.(e.target.value)}
               className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-sky-500/20 cursor-pointer"
             >
@@ -400,7 +434,7 @@ export const LogsTab: React.FC<LogsTabProps> = ({
           <span>Menampilkan {filteredLogsData.length} baris data telemetri (Sampling: {logInterval})</span>
           <span className="font-semibold text-slate-700">
             Sesi Terpilih:{' '}
-            {selectedSessionId === 'CURRENT' ? (currentSession?.id || 'Aktif') : selectedSessionId}
+            {(selectedSessionId === 'CURRENT' || (currentSession && selectedSessionId === currentSession.id)) ? (currentSession?.id || 'Aktif') : selectedSessionId}
             {activeSessionObj?.operatorName ? ` (${activeSessionObj.operatorName})` : ''}
           </span>
         </div>
