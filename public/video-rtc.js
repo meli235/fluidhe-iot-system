@@ -187,6 +187,16 @@ export class VideoRTC extends HTMLElement {
         return this.CODECS
             .filter(codec => this.media.includes(codec.includes('vc1') ? 'video' : 'audio'))
             .filter(codec => isSupported(`video/mp4; codecs="${codec}"`)).join();
+    static get observedAttributes() {
+        return ['src', 'mode'];
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'src' && newValue && newValue !== oldValue) {
+            this.src = newValue;
+        } else if (name === 'mode' && newValue && newValue !== oldValue) {
+            this.mode = newValue;
+        }
     }
 
     /**
@@ -210,7 +220,11 @@ export class VideoRTC extends HTMLElement {
             this.oninit();
         }
 
-        this.onconnect();
+        if (!this.wsURL && this.getAttribute('src')) {
+            this.src = this.getAttribute('src');
+        } else {
+            this.onconnect();
+        }
     }
 
     /**
@@ -238,8 +252,10 @@ export class VideoRTC extends HTMLElement {
      */
     oninit() {
         this.video = document.createElement('video');
-        this.video.controls = true;
+        this.video.controls = false;
         this.video.playsInline = true;
+        this.video.autoplay = true;
+        this.video.muted = true;
         this.video.preload = 'auto';
 
         this.video.style.display = 'block'; // fix bottom margin 4px

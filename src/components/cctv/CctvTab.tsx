@@ -126,6 +126,16 @@ export const CctvTab: React.FC<CctvTabProps> = ({
     return url;
   }, [cctvIpUrl]);
 
+  const videoStreamRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    if (videoStreamRef.current && wsRemoteUrl) {
+      try {
+        videoStreamRef.current.src = wsRemoteUrl;
+      } catch (_) {}
+    }
+  }, [wsRemoteUrl]);
+
   return (
     <div id="tour-cctv-tab" className="space-y-6">
       {/* Header Bar */}
@@ -296,6 +306,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
               ) : (
                 <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
                   {React.createElement('video-stream', {
+                    ref: videoStreamRef,
                     src: wsRemoteUrl,
                     style: { width: '100%', height: '100%', display: 'block' }
                   })}
