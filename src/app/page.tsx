@@ -1217,6 +1217,12 @@ export default function FluidHEDashboard() {
           const clean = url.trim().replace(/\/+$/, '');
           setCctvPublicUrl(clean);
           localStorage.setItem('fluidhe_cctv_public_url', clean);
+          if (clean.includes('youtube.com') || clean.includes('youtu.be')) {
+            setCctvIpUrl(clean);
+            setTempCctvUrl(clean);
+            setCctvStreamSource('custom');
+            return;
+          }
           // Gunakan mode=mse (WebSocket/TCP) untuk akses remote agar tembus Cloudflare tunnel
           // WebRTC (UDP) tidak bisa melewati tunnel, tapi MSE (WebSocket/TCP) bisa!
           const fullStream = isRemote

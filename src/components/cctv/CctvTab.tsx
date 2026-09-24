@@ -126,16 +126,36 @@ export const CctvTab: React.FC<CctvTabProps> = ({
     return url;
   }, [cctvIpUrl]);
 
+  const isYouTube = React.useMemo(() => {
+    const raw = (cctvIpUrl || cctvPublicUrl || '').toLowerCase();
+    return raw.includes('youtube.com') || raw.includes('youtu.be');
+  }, [cctvIpUrl, cctvPublicUrl]);
+
+  const youtubeEmbedUrl = React.useMemo(() => {
+    if (!isYouTube) return '';
+    const raw = (cctvIpUrl || cctvPublicUrl || '').trim();
+    if (raw.includes('/embed/')) {
+      const base = raw.split('?')[0];
+      return `${base}?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
+    }
+    let videoId = 'YdcPP8Mby6k';
+    const match = raw.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|video\/))([\w-]{11})/);
+    if (match && match[1]) {
+      videoId = match[1];
+    }
+    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
+  }, [isYouTube, cctvIpUrl, cctvPublicUrl]);
+
   const videoStreamRef = React.useRef<any>(null);
 
   React.useEffect(() => {
-    if (videoStreamRef.current && wsRemoteUrl) {
+    if (videoStreamRef.current && wsRemoteUrl && !isYouTube) {
       try {
         videoStreamRef.current.mode = 'mse';
         videoStreamRef.current.src = wsRemoteUrl;
       } catch (_) {}
     }
-  }, [wsRemoteUrl]);
+  }, [wsRemoteUrl, isYouTube]);
 
   return (
     <div id="tour-cctv-tab" className="space-y-6">
@@ -143,15 +163,15 @@ export const CctvTab: React.FC<CctvTabProps> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className={`w-2.5 h-2.5 rounded-full ${webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'bg-sky-500 animate-pulse' : 'bg-slate-400'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${webrtcConnected || isYouTube || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'bg-sky-500 animate-pulse' : 'bg-slate-400'}`} />
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
               CCTV Live Monitoring — Heat Exchanger Lab
             </h2>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl))
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${webrtcConnected || isYouTube || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl))
                 ? 'bg-sky-50 text-sky-700 border-sky-200'
                 : 'bg-slate-100 text-slate-600 border-slate-200'
               }`}>
-              {webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'STREAM ONLINE' : 'STREAM OFFLINE'}
+              {webrtcConnected || isYouTube || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'STREAM ONLINE' : 'STREAM OFFLINE'}
             </span>
             <button
               type="button"
@@ -304,6 +324,16 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                     </div>
                   )}
                 </>
+              ) : isYouTube ? (
+                <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
+                  <iframe
+                    src={youtubeEmbedUrl}
+                    className="w-full h-full border-0 rounded-2xl bg-black"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    title="Live CCTV Feed - Rig Heat Exchanger"
+                  />
+                </div>
               ) : (
                 <div className="w-full h-full border-0 rounded-2xl bg-black flex items-center justify-center overflow-hidden">
                   {React.createElement('video-stream', {
