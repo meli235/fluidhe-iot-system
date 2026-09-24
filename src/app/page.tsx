@@ -161,6 +161,8 @@ export default function FluidHEDashboard() {
     handleHeater2PowerToggle,
     handleTargetTempChange,
     handleThermostatLimitsChange,
+    handleThermostatSetupChange,
+    handleSensorCalibrationChange,
     handleServoAngleChange,
     handleValve1Change,
     handleValve2Change,
@@ -3885,41 +3887,54 @@ export default function FluidHEDashboard() {
                       }}
                     />
 
-                    {/* BARIS 1: SISTEM DUAL HEATER (HEATER 1 & HEATER 2 DALAM 1 BARIS TERPADU SEJAJAR) */}
+                    {/* BARIS 1: SISTEM DUAL HEATER (HEATER 1 & HEATER 2) + THERMOSTAT SETUP & PANEL KALIBRASI */}
                     <DualHeatersControl
                       controlMode={supabaseControls.control_mode}
-                      targetTemp={supabaseControls.target_temp ?? tc1Setpoint ?? 40}
+                      targetTemp={supabaseControls.target_temp ?? tc1Setpoint ?? 50}
+                      targetTempHot={supabaseControls.target_temp_hot ?? supabaseControls.target_temp ?? 50.0}
+                      toleranceLevel={supabaseControls.tolerance_level ?? 1}
+                      upperLimit={supabaseControls.upper_limit}
+                      lowerLimit={supabaseControls.lower_limit}
+                      flowCalibrationFactor={supabaseControls.flow_calibration_factor ?? 7.90}
+                      tempOffset={supabaseControls.temp_offset ?? 0.0}
+                      pressureOffset={supabaseControls.pressure_offset ?? 0.0}
                       heater1Status={supabaseControls.btn_onoff !== undefined ? supabaseControls.btn_onoff : (supabaseControls.heater_1_status ?? false)}
                       heater2Status={supabaseControls.heater_2_status !== undefined ? supabaseControls.heater_2_status : false}
                       emergencyStopped={emergencyStopped}
                       isBtnUpActive={activeMomentaryButtons.btn_up}
                       isBtnDownActive={activeMomentaryButtons.btn_down}
-                      targetUpper={supabaseControls.target_upper ?? 60}
-                      targetLower={supabaseControls.target_lower ?? 45}
                       onToggleHeater1={(nextState) => {
                         handleHeater1PowerToggle(nextState);
                         triggerSyncFeedback('Heater 1', nextState ? 'ON' : 'OFF');
                       }}
                       onToggleHeater2={(nextState) => {
                         handleHeater2PowerToggle(nextState);
-                        triggerSyncFeedback('Heater 2 (500W)', nextState ? 'ON' : 'OFF');
+                        triggerSyncFeedback('Heater 2 (Booster)', nextState ? 'ON' : 'OFF');
                       }}
-                      onStepUp={() => {
-                        const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
-                        const nextTemp = Math.min(90, Math.round(current / 10) * 10 + 10);
-                        setTc1Setpoint(nextTemp);
-                        handleTargetTempChange(nextTemp);
-                        handleStepButtonPress('btn_up');
-                        triggerSyncFeedback('Naikkan Level', `Target ${nextTemp}°C`);
+                      onAdjustSetPoint={(delta) => {
+                        const currentSp = supabaseControls.target_temp_hot ?? supabaseControls.target_temp ?? 50.0;
+                        const currentTol = supabaseControls.tolerance_level ?? 1;
+                        const newSp = Math.min(90, Math.max(20, currentSp + delta));
+                        handleThermostatSetupChange(newSp, currentTol);
+                        triggerSyncFeedback('Set Point Utama', `${newSp.toFixed(1)}°C`);
                       }}
-                      onStepDown={() => {
-                        const current = supabaseControls.target_temp ?? tc1Setpoint ?? 40;
-                        const nextTemp = Math.max(30, Math.round(current / 10) * 10 - 10);
-                        setTc1Setpoint(nextTemp);
-                        handleTargetTempChange(nextTemp);
-                        handleStepButtonPress('btn_down');
-                        triggerSyncFeedback('Turunkan Level', `Target ${nextTemp}°C`);
+                      onAdjustTolerance={(delta) => {
+                        const currentSp = supabaseControls.target_temp_hot ?? supabaseControls.target_temp ?? 50.0;
+                        const currentTol = supabaseControls.tolerance_level ?? 1;
+                        const newTol = Math.min(7, Math.max(1, currentTol + delta));
+                        handleThermostatSetupChange(currentSp, newTol);
+                        triggerSyncFeedback('Level Toleransi', `P${newTol} (±${newTol}.0°C)`);
                       }}
+                      onSaveThermostatSetup={(sp, tol) => {
+                        handleThermostatSetupChange(sp, tol);
+                        triggerSyncFeedback('Thermostat Setup', `SP: ${sp}°C | P${tol}`);
+                      }}
+                      onSaveCalibration={(flowCal, tOffset, pOffset) => {
+                        handleSensorCalibrationChange(flowCal, tOffset, pOffset);
+                        triggerSyncFeedback('Kalibrasi Sensor', `Flow: ${flowCal} | Temp: ${tOffset}°C | Press: ${pOffset}bar`);
+                      }}
+                      targetUpper={supabaseControls.target_upper ?? 60}
+                      targetLower={supabaseControls.target_lower ?? 45}
                       onSaveThermostatLimits={(up, low) => {
                         handleThermostatLimitsChange(up, low);
                         triggerSyncFeedback('Thermostat Limit', `H2 OFF: ${up}°C | H2 ON: ${low}°C`);

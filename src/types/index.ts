@@ -111,6 +111,14 @@ export interface DeviceControlsRow {
   delta_pressure_2?: number;
   flow_rate?: number;
   flow_rate_2?: number;
+  // Thermostat Setup (Set Point & Level P1-P7) & Sensor Calibration
+  target_temp_hot?: number;
+  tolerance_level?: number;
+  upper_limit?: number;
+  lower_limit?: number;
+  flow_calibration_factor?: number;
+  temp_offset?: number;
+  pressure_offset?: number;
 }
 
 export type SupabaseConnectionStatus = 'ONLINE' | 'OFFLINE' | 'CONNECTING' | 'ERROR';

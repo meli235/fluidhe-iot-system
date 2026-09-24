@@ -44,7 +44,14 @@ export function useSupabaseIntegration() {
     target_flow: 2.0,
     btn_up: false,
     btn_onoff: false,
-    btn_down: false
+    btn_down: false,
+    target_temp_hot: 50.0,
+    tolerance_level: 1,
+    upper_limit: 51.0,
+    lower_limit: 49.0,
+    flow_calibration_factor: 7.90,
+    temp_offset: 0.0,
+    pressure_offset: 0.0
   });
   const [activeMomentaryButtons, setActiveMomentaryButtons] = useState<{ btn_up: boolean; btn_onoff: boolean; btn_down: boolean }>({
     btn_up: false,
@@ -465,6 +472,52 @@ export function useSupabaseIntegration() {
     return result;
   };
 
+  const handleThermostatSetupChange = async (targetTempHot: number, toleranceLevel: number) => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    const upper = parseFloat((targetTempHot + toleranceLevel).toFixed(1));
+    const lower = parseFloat((targetTempHot - toleranceLevel).toFixed(1));
+    setDeviceControls((prev) => ({
+      ...prev,
+      target_temp_hot: targetTempHot,
+      tolerance_level: toleranceLevel,
+      upper_limit: upper,
+      lower_limit: lower,
+      target_upper: upper,
+      target_lower: lower,
+      target_temp: targetTempHot
+    }));
+    const result = await supabaseControlService.setThermostatSetup(targetTempHot, toleranceLevel);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal update Thermostat Setup: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+    }
+    return result;
+  };
+
+  const handleSensorCalibrationChange = async (flowFactor: number, tempOffset: number, pressOffset: number) => {
+    lastUserActionTimeRef.current = Date.now();
+    setIsUpdatingControl(true);
+    setDeviceControls((prev) => ({
+      ...prev,
+      flow_calibration_factor: flowFactor,
+      temp_offset: tempOffset,
+      pressure_offset: pressOffset
+    }));
+    const result = await supabaseControlService.setSensorCalibration(flowFactor, tempOffset, pressOffset);
+    setIsUpdatingControl(false);
+    if (!result.success) {
+      setErrorMessage(`Gagal update Kalibrasi Sensor: ${result.error}`);
+    } else {
+      setErrorMessage(null);
+      lastUserActionTimeRef.current = Date.now();
+    }
+    return result;
+  };
+
   const handleServoAngleChange = async (servoAngle: number) => {
     lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
@@ -750,6 +803,8 @@ export function useSupabaseIntegration() {
     handleHeater2PowerToggle,
     handleTargetTempChange,
     handleThermostatLimitsChange,
+    handleThermostatSetupChange,
+    handleSensorCalibrationChange,
     handleServoAngleChange,
     handleValve1Change,
     handleValve2Change,

@@ -211,6 +211,32 @@ export const supabaseControlService = {
     return updateDeviceControls({ target_upper: up, target_lower: low });
   },
 
+  // 4c. Thermostat Setup Baru (Set Point & Level P1-P7)
+  setThermostatSetup: async (targetTempHot: number, toleranceLevel: number) => {
+    const sp = parseFloat(targetTempHot.toFixed(1));
+    const tol = Math.max(1, Math.min(7, Math.round(toleranceLevel)));
+    const upper = parseFloat((sp + tol).toFixed(1));
+    const lower = parseFloat((sp - tol).toFixed(1));
+    return updateDeviceControls({
+      target_temp_hot: sp,
+      tolerance_level: tol,
+      upper_limit: upper,
+      lower_limit: lower,
+      target_upper: upper,
+      target_lower: lower,
+      target_temp: sp
+    });
+  },
+
+  // 4d. Kalibrasi Sensor Dinamis (Flow, Temp Offset, Pressure Offset)
+  setSensorCalibration: async (flowCalibrationFactor: number, tempOffset: number, pressureOffset: number) => {
+    return updateDeviceControls({
+      flow_calibration_factor: parseFloat(flowCalibrationFactor.toFixed(2)),
+      temp_offset: parseFloat(tempOffset.toFixed(1)),
+      pressure_offset: parseFloat(pressureOffset.toFixed(2))
+    });
+  },
+
   // 5. Motorized Valve 1 (Panas) & Valve 2 (Dingin)
   setValve1Percent: async (percent: number) => {
     const parsed = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
