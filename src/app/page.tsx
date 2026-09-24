@@ -1207,26 +1207,59 @@ export default function FluidHEDashboard() {
         const host = window.location.hostname;
         const isLocal = host === 'localhost' || host === '127.0.0.1';
 
-        // Selalu default ke local player agar kontrol PTZ, snapshot, & audio WebRTC aktif
-        setCctvStreamSource('local');
+        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+        const isRemote = isHttps || !isLocal;
+
+        const applyCctvUrl = (url: string) => {
+          if (!url) return;
+          const clean = url.trim().replace(/\/+$/, '');
+          setCctvPublicUrl(clean);
+          localStorage.setItem('fluidhe_cctv_public_url', clean);
+          const fullStream = `${clean}/stream.html?src=he_cctv`;
+          setCctvIpUrl(fullStream);
+          setTempCctvUrl(fullStream);
+          // Jika diakses remote (Vercel/HTTPS/beda Wi-Fi), gunakan custom stream (WebSocket/MSE) agar 100% tembus firewall tanpa UDP
+          if (isRemote) {
+            setCctvStreamSource('custom');
+          }
+        };
+
+        // Default mode: jika lokal gunakan WebRTC direct, jika remote gunakan multi-protocol stream
+        setCctvStreamSource(isRemote ? 'custom' : 'local');
 
         const savedLocal = localStorage.getItem('fluidhe_cctv_public_url');
         if (paramCctv) {
-          const clean = paramCctv.trim().replace(/\/+$/, '');
-          setCctvPublicUrl(clean);
-          localStorage.setItem('fluidhe_cctv_public_url', clean);
+          applyCctvUrl(paramCctv);
         } else if (savedLocal) {
-          setCctvPublicUrl(savedLocal.trim().replace(/\/+$/, ''));
+          applyCctvUrl(savedLocal);
         }
 
-        // Ambil konfigurasi tunnel aktif dari server
+        // 1. Tarik langsung dari database Supabase Cloud (Otomatis & Real-Time)
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kkxfbjpbaxnmgsnxrbpj.supabase.co';
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_IzezoiU9oZxnS4LmMONYsg__y3vG6-K';
+        fetch(`${supabaseUrl}/rest/v1/telemetry_data?warning_status=like.CCTV_URL:*&order=id.desc&limit=1`, {
+          headers: {
+            'apikey': anonKey,
+            'Authorization': `Bearer ${anonKey}`
+          }
+        })
+          .then((res) => res.json())
+          .then((rows) => {
+            if (Array.isArray(rows) && rows.length > 0 && typeof rows[0]?.warning_status === 'string') {
+              const url = rows[0].warning_status.replace(/^CCTV_URL:/i, '').trim();
+              if (url.startsWith('http')) {
+                applyCctvUrl(url);
+              }
+            }
+          })
+          .catch(() => {});
+
+        // 2. Cadangan: Tarik dari internal proxy /api/cctv/tunnel
         fetch('/api/cctv/tunnel')
           .then((res) => res.json())
           .then((data) => {
             if (data?.success && data?.publicUrl) {
-              const clean = data.publicUrl.trim().replace(/\/+$/, '');
-              setCctvPublicUrl(clean);
-              localStorage.setItem('fluidhe_cctv_public_url', clean);
+              applyCctvUrl(data.publicUrl);
             }
           })
           .catch(() => {});
@@ -1903,7 +1936,10 @@ export default function FluidHEDashboard() {
           }
         } else if (state === 'failed') {
           setWebrtcConnected(false);
-          setWebrtcError('Koneksi WebRTC gagal. Klik Coba Sambung Ulang.');
+          setWebrtcError('WebRTC direct gagal. Mengalihkan ke streaming cloud...');
+          if (cctvPublicUrl) {
+            setCctvStreamSource('custom');
+          }
         } else if (state === 'disconnected' || state === 'closed') {
           setWebrtcConnected(false);
         }
@@ -1947,8 +1983,11 @@ export default function FluidHEDashboard() {
       }
 
       if (!resp || !resp.ok) {
-        setWebrtcError('Koneksi WebRTC belum tersambung. Klik Coba Sambung Ulang.');
+        setWebrtcError('Koneksi WebRTC direct gagal. Mengalihkan ke streaming cloud...');
         setWebrtcConnected(false);
+        if (cctvPublicUrl) {
+          setCctvStreamSource('custom');
+        }
         return;
       }
 
@@ -1958,8 +1997,11 @@ export default function FluidHEDashboard() {
       setWebrtcError(null);
     } catch (err: any) {
       console.warn('WebRTC connect notice:', err?.message || err);
-      setWebrtcError('Kamera CCTV offline');
+      setWebrtcError('Mengalihkan ke streaming cloud...');
       setWebrtcConnected(false);
+      if (cctvPublicUrl) {
+        setCctvStreamSource('custom');
+      }
     }
   };
 

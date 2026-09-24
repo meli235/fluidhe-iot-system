@@ -87,16 +87,16 @@ export const CctvTab: React.FC<CctvTabProps> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className={`w-2.5 h-2.5 rounded-full ${webrtcConnected ? 'bg-sky-500 animate-pulse' : 'bg-slate-400'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'bg-sky-500 animate-pulse' : 'bg-slate-400'}`} />
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
               CCTV Live Monitoring — Heat Exchanger Lab
             </h2>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-              webrtcConnected
+              webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl))
                 ? 'bg-sky-50 text-sky-700 border-sky-200'
                 : 'bg-slate-100 text-slate-600 border-slate-200'
             }`}>
-              {webrtcConnected ? 'STREAM ONLINE' : 'STREAM OFFLINE'}
+              {webrtcConnected || (cctvStreamSource === 'custom' && Boolean(cctvPublicUrl)) ? 'STREAM ONLINE' : 'STREAM OFFLINE'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
