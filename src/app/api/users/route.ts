@@ -52,15 +52,14 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
     'admin@uad.ac.id': 'admin123',
     'admin.a@uad.ac.id': '1234.Admin',
     'Admin A': '1234.Admin',
-    'admin a': '1234.Admin',
-    'admin.b@itenas.ac.id': '123.Admin',
-    'admin.b@uad.ac.id': '123.Admin',
-    'Admin B': '123.Admin',
-    'admin b': '123.Admin',
-    'operator.b@itenas.ac.id': '123.Operator',
-    'operator.b@uad.ac.id': '123.Operator',
-    'Operator B': '123.Operator',
-    'operator b': '123.Operator'
+    'admin.b@itenas.ac.id': 'zW8QDCw7',
+    'admin.b@uad.ac.id': 'zW8QDCw7',
+    'Admin B': 'zW8QDCw7',
+    'admin b': 'zW8QDCw7',
+    'operator.b@itenas.ac.id': 'emmrBXaG',
+    'operator.b@uad.ac.id': 'emmrBXaG',
+    'Operator B': 'emmrBXaG',
+    'operator b': 'emmrBXaG'
   }
 };
 
