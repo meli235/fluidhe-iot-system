@@ -3971,8 +3971,8 @@ export default function FluidHEDashboard() {
                       }}
                     />
 
-                    {/* BARIS 2: POMPA SIRKULASI (KIRI), KATUP SOLENOID UAP (TENGAH), KATUP AIR DINGIN (KANAN) */}
-                    <div className="col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 items-stretch">
+                    {/* BARIS 2: POMPA SIRKULASI (KIRI), KATUP SOLENOID UAP (TENGAH - ADMIN ONLY), KATUP AIR DINGIN (KANAN) */}
+                    <div className={`col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-2 ${currentUser.role === 'admin' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-3.5 sm:gap-4 items-stretch`}>
                       {/* 1. Pompa Sirkulasi (KIRI) */}
                       <PumpControl
                         controlMode={supabaseControls.control_mode}
@@ -3984,27 +3984,29 @@ export default function FluidHEDashboard() {
                         }}
                       />
 
-                      {/* 2. Katup Solenoid Uap (TENGAH) */}
-                      <SteamValveControl
-                        controlMode={supabaseControls.control_mode}
-                        uapStatus={supabaseControls.uap_status ?? false}
-                        uapAutoStatus={supabaseControls.control_mode === 'AUTO' ? true : (supabaseControls.uap_auto_status ?? false)}
-                        uapIntervalMin={supabaseControls.uap_interval_min ?? 5}
-                        emergencyStopped={emergencyStopped}
-                        isPressureDangerous={latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0}
-                        onToggleUapManual={(nextVal: boolean) => {
-                          handleUapStatusToggle(nextVal);
-                          triggerSyncFeedback('Katup Uap Manual', nextVal ? 'DIBUKA' : 'DITUTUP');
-                        }}
-                        onToggleUapAuto={(nextVal: boolean) => {
-                          handleUapAutoToggle(nextVal);
-                          triggerSyncFeedback('Katup Uap Otomatis', nextVal ? 'AKTIF' : 'NONAKTIF');
-                        }}
-                        onChangeUapInterval={(min: number) => {
-                          handleUapIntervalChange(min);
-                          triggerSyncFeedback('Interval Katup Uap', `${min} Menit`);
-                        }}
-                      />
+                      {/* 2. Katup Solenoid Uap (TENGAH - HANYA ADMIN) */}
+                      {currentUser.role === 'admin' && (
+                        <SteamValveControl
+                          controlMode={supabaseControls.control_mode}
+                          uapStatus={supabaseControls.uap_status ?? false}
+                          uapAutoStatus={supabaseControls.control_mode === 'AUTO' ? true : (supabaseControls.uap_auto_status ?? false)}
+                          uapIntervalMin={supabaseControls.uap_interval_min ?? 5}
+                          emergencyStopped={emergencyStopped}
+                          isPressureDangerous={latestData.pi1 >= 2.0 || latestData.pi3 >= 2.0}
+                          onToggleUapManual={(nextVal: boolean) => {
+                            handleUapStatusToggle(nextVal);
+                            triggerSyncFeedback('Katup Uap Manual', nextVal ? 'DIBUKA' : 'DITUTUP');
+                          }}
+                          onToggleUapAuto={(nextVal: boolean) => {
+                            handleUapAutoToggle(nextVal);
+                            triggerSyncFeedback('Katup Uap Otomatis', nextVal ? 'AKTIF' : 'NONAKTIF');
+                          }}
+                          onChangeUapInterval={(min: number) => {
+                            handleUapIntervalChange(min);
+                            triggerSyncFeedback('Interval Katup Uap', `${min} Menit`);
+                          }}
+                        />
+                      )}
 
                       {/* 3. Katup Solenoid Air Dingin (KANAN) */}
                       <div id="tour-cold-valve" className="flex flex-col h-full">

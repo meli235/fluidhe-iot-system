@@ -182,16 +182,6 @@ export const OPERATOR_TOUR_STEPS: TourStep[] = [
     description: 'Membuka pasokan air pendingin ke bagian jacket penukar panas.',
     tips: 'Mode AUTO membuka katup ini secara otomatis sebagai proteksi.'
   },
-  {
-    id: 'ctrl-7-steam-operator',
-    targetId: 'tour-steam-valve',
-    tab: 'control',
-    badge: 'Langkah 7',
-    icon: <Wind className="w-5 h-5 text-teal-600" />,
-    title: '7. Katup Pelepas Uap',
-    description: 'Membuang tekanan uap berlebih dari tangki pemanas.',
-    tips: 'Sistem otomatis membuka katup jika tekanan tangki melebihi batas aman.'
-  },
 
   // TAB 3: DATA LOGS & LAPORAN
   {
