@@ -869,6 +869,11 @@ export default function FluidHEDashboard() {
     'admin.a@uad.ac.id': '1234.Admin',
     'admin a': '1234.Admin',
     'Admin A': '1234.Admin',
+    'admin.b@itenas.ac.id': '123.Admin',
+    'admin.b@uad.ac.id': '123.Admin',
+    'admin b': '123.Admin',
+    'Admin B': '123.Admin',
+    'operator.b@itenas.ac.id': '123.Operator',
     'operator.b@uad.ac.id': '123.Operator',
     'operator b': '123.Operator',
     'Operator B': '123.Operator'

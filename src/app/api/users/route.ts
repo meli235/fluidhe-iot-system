@@ -31,8 +31,17 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
     {
       id: 'USR-07',
       name: 'Operator B',
-      email: 'operator.b@uad.ac.id',
+      email: 'operator.b@itenas.ac.id',
       role: 'operator',
+      status: 'Active',
+      lastLogin: 'Belum Pernah',
+      isScheduleRestricted: false
+    },
+    {
+      id: 'USR-08',
+      name: 'Admin B',
+      email: 'admin.b@itenas.ac.id',
+      role: 'admin',
       status: 'Active',
       lastLogin: 'Belum Pernah',
       isScheduleRestricted: false
@@ -44,6 +53,11 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
     'admin.a@uad.ac.id': '1234.Admin',
     'Admin A': '1234.Admin',
     'admin a': '1234.Admin',
+    'admin.b@itenas.ac.id': '123.Admin',
+    'admin.b@uad.ac.id': '123.Admin',
+    'Admin B': '123.Admin',
+    'admin b': '123.Admin',
+    'operator.b@itenas.ac.id': '123.Operator',
     'operator.b@uad.ac.id': '123.Operator',
     'Operator B': '123.Operator',
     'operator b': '123.Operator'
