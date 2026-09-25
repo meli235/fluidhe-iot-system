@@ -876,7 +876,10 @@ export default function FluidHEDashboard() {
     'operator.b@itenas.ac.id': 'emmrBXaG',
     'operator.b@uad.ac.id': 'emmrBXaG',
     'operator b': 'emmrBXaG',
-    'Operator B': 'emmrBXaG'
+    'Operator B': 'emmrBXaG',
+    'dwi.melianti@mhs.itenas.ac.id': 'dfCXY6JJ',
+    'operator kelas a': 'dfCXY6JJ',
+    'Operator Kelas A': 'dfCXY6JJ'
   };
   const [userPasswords, setUserPasswords] = useState<Record<string, string>>(DEFAULT_PASSWORDS);
   const [loginError, setLoginError] = useState<string | null>(null);

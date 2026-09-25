@@ -19,7 +19,7 @@
       ],
       "allowedStartTime": "07:00",
       "allowedEndTime": "18:00",
-      "lastSeen": 1790320516131
+      "lastSeen": 1790322615241
     },
     {
       "id": "USR-02",
@@ -109,6 +109,16 @@
       "lastLogin": "Belum Pernah",
       "isScheduleRestricted": false,
       "lastSeen": 0
+    },
+    {
+      "id": "USR-09",
+      "name": "Operator Kelas A",
+      "email": "dwi.melianti@mhs.itenas.ac.id",
+      "role": "operator",
+      "status": "Active",
+      "lastLogin": "Belum Pernah",
+      "isScheduleRestricted": false,
+      "lastSeen": 0
     }
   ],
   "passwords": {
@@ -126,6 +136,9 @@
     "operator.b@itenas.ac.id": "emmrBXaG",
     "operator.b@uad.ac.id": "emmrBXaG",
     "Operator B": "emmrBXaG",
-    "operator b": "emmrBXaG"
+    "operator b": "emmrBXaG",
+    "dwi.melianti@mhs.itenas.ac.id": "dfCXY6JJ",
+    "Operator Kelas A": "dfCXY6JJ",
+    "operator kelas a": "dfCXY6JJ"
   }
 }

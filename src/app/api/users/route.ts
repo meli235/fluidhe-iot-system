@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { UserItem } from '@/types';
+import { SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY } from '@/lib/supabase';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -45,6 +46,15 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
       status: 'Active',
       lastLogin: 'Belum Pernah',
       isScheduleRestricted: false
+    },
+    {
+      id: 'USR-09',
+      name: 'Operator Kelas A',
+      email: 'dwi.melianti@mhs.itenas.ac.id',
+      role: 'operator',
+      status: 'Active',
+      lastLogin: 'Belum Pernah',
+      isScheduleRestricted: false
     }
   ],
   passwords: {
@@ -52,6 +62,7 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
     'admin@uad.ac.id': 'admin123',
     'admin.a@uad.ac.id': '1234.Admin',
     'Admin A': '1234.Admin',
+    'admin a': '1234.Admin',
     'admin.b@itenas.ac.id': 'zW8QDCw7',
     'admin.b@uad.ac.id': 'zW8QDCw7',
     'Admin B': 'zW8QDCw7',
@@ -59,11 +70,14 @@ const DEFAULT_DATA: { users: UserItem[]; passwords: Record<string, string> } = {
     'operator.b@itenas.ac.id': 'emmrBXaG',
     'operator.b@uad.ac.id': 'emmrBXaG',
     'Operator B': 'emmrBXaG',
-    'operator b': 'emmrBXaG'
+    'operator b': 'emmrBXaG',
+    'dwi.melianti@mhs.itenas.ac.id': 'dfCXY6JJ',
+    'Operator Kelas A': 'dfCXY6JJ',
+    'operator kelas a': 'dfCXY6JJ'
   }
 };
 
-function readDatabase() {
+function readDatabase(): { users: UserItem[]; passwords: Record<string, string> } {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -111,9 +125,144 @@ function writeDatabase(data: { users: UserItem[]; passwords: Record<string, stri
   }
 }
 
-// GET: Ambil daftar seluruh user & password publik sistem
-export async function GET() {
+// ─── SUPABASE CLOUD USER SYNCHRONIZATION ───
+// Allows user accounts created via UI on Vercel or localhost to sync seamlessly
+async function fetchSupabaseUserSync(): Promise<any[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/telemetry_data?warning_status=like.USER_SYNC:*&order=id.asc`, {
+      headers: {
+        'apikey': DEFAULT_SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${DEFAULT_SUPABASE_ANON_KEY}`
+      },
+      signal: controller.signal,
+      cache: 'no-store'
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const rows = await res.json();
+    const payloads: any[] = [];
+    for (const r of rows) {
+      if (typeof r.warning_status === 'string' && r.warning_status.startsWith('USER_SYNC:')) {
+        try {
+          const payload = JSON.parse(r.warning_status.slice('USER_SYNC:'.length));
+          payloads.push(payload);
+        } catch (e) {}
+      }
+    }
+    return payloads;
+  } catch (err) {
+    console.warn('[Users API] Failed to fetch Supabase user sync:', err);
+    return [];
+  }
+}
+
+async function pushSupabaseUserSync(payload: any): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    await fetch(`${SUPABASE_URL}/rest/v1/telemetry_data`, {
+      method: 'POST',
+      headers: {
+        'apikey': DEFAULT_SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${DEFAULT_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        warning_status: `USER_SYNC:${JSON.stringify(payload)}`
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+  } catch (err) {
+    console.warn('[Users API] Failed to push Supabase user sync:', err);
+  }
+}
+
+async function getMergedDatabase(): Promise<{ users: UserItem[]; passwords: Record<string, string> }> {
   const db = readDatabase();
+  const syncItems = await fetchSupabaseUserSync();
+  if (syncItems.length === 0) return db;
+
+  const users: UserItem[] = [...db.users];
+  const passwords: Record<string, string> = { ...db.passwords };
+
+  for (const item of syncItems) {
+    if (!item) continue;
+    const action = item.action || 'create';
+
+    if (action === 'create' || item.user) {
+      const u = item.user;
+      if (u && u.email) {
+        const cleanEmail = u.email.toLowerCase().trim();
+        const existingIdx = users.findIndex(x => x.email.toLowerCase() === cleanEmail || (u.id && x.id === u.id));
+        if (existingIdx >= 0) {
+          users[existingIdx] = { ...users[existingIdx], ...u };
+        } else {
+          users.push(u);
+        }
+        if (item.password) {
+          passwords[cleanEmail] = item.password;
+          if (u.name) {
+            passwords[u.name] = item.password;
+            passwords[u.name.toLowerCase()] = item.password;
+          }
+        }
+      }
+    } else if (action === 'update' && item.update) {
+      const { email, id, newPassword, newRole, name, status, lastLogin, isScheduleRestricted, allowedStartDate, allowedEndDate, allowedStartTime, allowedEndTime, allowedDays } = item.update;
+      const targetUser = users.find(x => {
+        if (id && x.id === id) return true;
+        if (email && x.email.toLowerCase() === email.toLowerCase().trim()) return true;
+        return false;
+      });
+      if (targetUser) {
+        if (name) targetUser.name = name.trim();
+        if (newRole) targetUser.role = newRole;
+        if (typeof isScheduleRestricted === 'boolean') targetUser.isScheduleRestricted = isScheduleRestricted;
+        if (allowedStartDate !== undefined) targetUser.allowedStartDate = allowedStartDate;
+        if (allowedEndDate !== undefined) targetUser.allowedEndDate = allowedEndDate;
+        if (allowedStartTime !== undefined) targetUser.allowedStartTime = allowedStartTime;
+        if (allowedEndTime !== undefined) targetUser.allowedEndTime = allowedEndTime;
+        if (Array.isArray(allowedDays)) targetUser.allowedDays = allowedDays;
+        if (status) targetUser.status = status;
+        if (lastLogin) targetUser.lastLogin = lastLogin;
+      }
+      if (email && newPassword) {
+        const cleanEmail = email.toLowerCase().trim();
+        passwords[cleanEmail] = newPassword;
+        if (targetUser?.name) {
+          passwords[targetUser.name] = newPassword;
+          passwords[targetUser.name.toLowerCase()] = newPassword;
+        }
+      }
+    } else if (action === 'delete') {
+      const { id, email } = item;
+      const cleanEmail = email ? email.toLowerCase().trim() : null;
+      const target = users.find(u => (id && u.id === id) || (cleanEmail && u.email.toLowerCase() === cleanEmail));
+      const filtered = users.filter(u => {
+        if (id && u.id === id) return false;
+        if (cleanEmail && u.email.toLowerCase() === cleanEmail) return false;
+        return true;
+      });
+      users.length = 0;
+      users.push(...filtered);
+      if (cleanEmail) delete passwords[cleanEmail];
+      if (target?.name) {
+        delete passwords[target.name];
+        delete passwords[target.name.toLowerCase()];
+      }
+    }
+  }
+
+  return { users, passwords };
+}
+
+// GET: Ambil daftar seluruh user & password publik sistem (dengan sinkronisasi Cloud Supabase)
+export async function GET() {
+  const db = await getMergedDatabase();
   const now = Date.now();
   const usersWithOnlineStatus = db.users.map((u: UserItem) => ({
     ...u,
@@ -137,7 +286,7 @@ export async function POST(req: Request) {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const db = readDatabase();
+    const db = await getMergedDatabase();
 
     if (db.users.some((u: UserItem) => u.email.toLowerCase() === cleanEmail)) {
       return NextResponse.json({ success: false, error: `Email ${cleanEmail} sudah terdaftar!` }, { status: 400 });
@@ -172,9 +321,13 @@ export async function POST(req: Request) {
     db.users.push(newUser);
     if (password) {
       db.passwords[cleanEmail] = password;
+      db.passwords[newUser.name] = password;
+      db.passwords[newUser.name.toLowerCase()] = password;
     }
 
     writeDatabase(db);
+    // Push sync to Supabase so Vercel & localhost are always in sync!
+    await pushSupabaseUserSync({ action: 'create', user: newUser, password: password || '' });
 
     return NextResponse.json({
       success: true,
@@ -208,7 +361,7 @@ export async function PATCH(req: Request) {
       lastSeen
     } = body;
 
-    const db = readDatabase();
+    const db = await getMergedDatabase();
 
     const targetUser = db.users.find((x: UserItem) => {
       if (id && x.id === id) return true;
@@ -233,9 +386,18 @@ export async function PATCH(req: Request) {
     if (email && newPassword) {
       const cleanEmail = email.toLowerCase().trim();
       db.passwords[cleanEmail] = newPassword;
+      if (targetUser?.name) {
+        db.passwords[targetUser.name] = newPassword;
+        db.passwords[targetUser.name.toLowerCase()] = newPassword;
+      }
     }
 
     writeDatabase(db);
+
+    // Only push to Supabase if it's a persistent credential / profile / permission update (skip raw heartbeat lastSeen)
+    if (newPassword || newRole || name || status || isScheduleRestricted !== undefined || allowedStartDate !== undefined || allowedEndDate !== undefined) {
+      await pushSupabaseUserSync({ action: 'update', update: body });
+    }
 
     const now = Date.now();
     const usersWithOnlineStatus = db.users.map((u: UserItem) => ({
@@ -260,10 +422,12 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
     const email = searchParams.get('email');
 
-    const db = readDatabase();
+    const db = await getMergedDatabase();
 
     if (id || email) {
       const cleanEmail = email ? email.toLowerCase().trim() : null;
+      const target = db.users.find(u => (id && u.id === id) || (cleanEmail && u.email.toLowerCase() === cleanEmail));
+
       db.users = db.users.filter((u: UserItem) => {
         if (id && u.id === id) return false;
         if (cleanEmail && u.email.toLowerCase() === cleanEmail) return false;
@@ -273,9 +437,14 @@ export async function DELETE(req: Request) {
       if (cleanEmail && db.passwords[cleanEmail]) {
         delete db.passwords[cleanEmail];
       }
-    }
+      if (target?.name) {
+        delete db.passwords[target.name];
+        delete db.passwords[target.name.toLowerCase()];
+      }
 
-    writeDatabase(db);
+      writeDatabase(db);
+      await pushSupabaseUserSync({ action: 'delete', id: id || undefined, email: cleanEmail || undefined });
+    }
 
     return NextResponse.json({
       success: true,
