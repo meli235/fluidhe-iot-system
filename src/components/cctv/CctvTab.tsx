@@ -14,7 +14,8 @@ import {
   Volume1,
   AlertTriangle,
   Wifi,
-  RotateCw
+  RotateCw,
+  ExternalLink
 } from 'lucide-react';
 import { TelemetryPoint, TempLabels } from '@/types';
 import { PtzController } from './PtzController';
@@ -90,6 +91,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
 }) => {
   const [isWifiModalOpen, setIsWifiModalOpen] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [streamRefreshKey, setStreamRefreshKey] = React.useState(0);
 
   React.useEffect(() => {
     if (!webrtcConnected) {
@@ -150,9 +152,18 @@ export const CctvTab: React.FC<CctvTabProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 setIsRefreshing(true);
+                try {
+                  const res = await fetch('/api/cctv/tunnel');
+                  const data = await res.json();
+                  if (data?.success && data?.publicUrl && setCctvPublicUrl) {
+                    setCctvPublicUrl(data.publicUrl);
+                  }
+                } catch (_) {}
+                setStreamRefreshKey((k) => k + 1);
                 connectWebRTC();
+                triggerCctvToast('Menyegarkan tayangan CCTV...', 'info');
                 setTimeout(() => setIsRefreshing(false), 1200);
               }}
               className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
@@ -208,6 +219,17 @@ export const CctvTab: React.FC<CctvTabProps> = ({
                 <div className="bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/10 text-[10px] font-semibold text-zinc-300">
                   1080P
                 </div>
+
+                <a
+                  href={cloudflareEmbedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-black/60 hover:bg-black/90 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/10 text-[10px] font-semibold text-sky-300 hover:text-white flex items-center gap-1 transition"
+                  title="Buka Streaming di Tab Baru"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Tab Baru</span>
+                </a>
               </div>
             </div>
 
@@ -221,7 +243,8 @@ export const CctvTab: React.FC<CctvTabProps> = ({
             {/* Video Stream Element */}
             <div className="absolute inset-0 z-10 w-full h-full flex items-center justify-center bg-black overflow-hidden rounded-2xl">
               <iframe
-                src={cloudflareEmbedUrl}
+                key={streamRefreshKey}
+                src={`${cloudflareEmbedUrl}${cloudflareEmbedUrl.includes('?') ? '&' : '?'}_t=${streamRefreshKey}`}
                 className="w-full h-full border-0 rounded-2xl bg-black"
                 allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *"
                 allowFullScreen
@@ -355,7 +378,7 @@ export const CctvTab: React.FC<CctvTabProps> = ({
           onPtzAction={handlePtzAction}
           onPtzPreset={handlePtzPreset}
           latestData={latestData}
-          connected={webrtcConnected}
+          connected={Boolean(webrtcConnected || isHardwareOnline || cctvPublicUrl)}
           isHardwareOnline={isHardwareOnline}
           tempLabels={tempLabels}
         />

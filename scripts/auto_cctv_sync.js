@@ -6,7 +6,10 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kkxfbjpbax
 const MASTER_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtreGZianBiYXhubWdzbnhyYnBqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTIxNDY2MCwiZXhwIjoyMTAwNzkwNjYwfQ.AotyhjikKONI3q1OatoEenQ4wS1rb3WcCoTROCqR7WU';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || MASTER_KEY;
 
+let currentActiveUrl = '';
+
 async function syncToSupabase(publicUrl) {
+  if (!publicUrl) return;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/telemetry_data`, {
       method: 'POST',
@@ -47,42 +50,69 @@ function saveLocalConfig(publicUrl) {
   } catch (_) {}
 }
 
-// 2. Jalankan cloudflared tunnel
+// 2. Jalankan cloudflared tunnel dengan HTTP2 (Rock-Solid pada jaringan seluler/4G)
 const cloudflaredPath = path.join(__dirname, 'cloudflared.exe');
-console.log('[INFO] Memulai Cloudflare Tunnel ke go2rtc (port 8889)...');
+let proc = null;
+let isStopping = false;
 
-const proc = spawn(cloudflaredPath, ['tunnel', '--url', 'http://localhost:8889'], {
-  stdio: ['ignore', 'pipe', 'pipe']
-});
+function startTunnel() {
+  if (isStopping) return;
+  console.log('[INFO] Memulai Cloudflare Tunnel via HTTP2 TCP ke go2rtc (port 8889)...');
 
-let urlFound = false;
+  // Menggunakan --protocol http2 dan --edge-ip-version 4 agar tidak terputus timeout UDP QUIC di Wi-Fi 4G
+  proc = spawn(cloudflaredPath, [
+    'tunnel',
+    '--protocol', 'http2',
+    '--edge-ip-version', '4',
+    '--url', 'http://localhost:8889'
+  ], {
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
 
-function handleOutput(data) {
-  const text = data.toString();
-  process.stdout.write(text);
+  function handleOutput(data) {
+    const text = data.toString();
+    process.stdout.write(text);
 
-  const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
-  if (match && match[0]) {
-    const publicUrl = match[0];
-    if (!urlFound) {
-      urlFound = true;
-      console.log('\n======================================================');
-      console.log(`🚀 URL CCTV AKTIF: ${publicUrl}`);
-      console.log('======================================================\n');
-      saveLocalConfig(publicUrl);
-      syncToSupabase(publicUrl);
+    const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+    if (match && match[0]) {
+      const publicUrl = match[0];
+      if (publicUrl !== currentActiveUrl) {
+        currentActiveUrl = publicUrl;
+        console.log('\n======================================================');
+        console.log(`🚀 URL CCTV BARU AKTIF: ${publicUrl}`);
+        console.log('======================================================\n');
+        saveLocalConfig(publicUrl);
+        syncToSupabase(publicUrl);
+      }
     }
   }
+
+  proc.stdout.on('data', handleOutput);
+  proc.stderr.on('data', handleOutput);
+
+  proc.on('close', (code) => {
+    console.log(`[INFO] Cloudflare process exited with code ${code}.`);
+    if (!isStopping) {
+      console.log('[INFO] Merestart Cloudflare Tunnel dalam 3 detik...');
+      setTimeout(startTunnel, 3000);
+    }
+  });
+
+  proc.on('error', (err) => {
+    console.error('[ERR] Cloudflare spawn error:', err);
+  });
 }
 
-proc.stdout.on('data', handleOutput);
-proc.stderr.on('data', handleOutput);
+startTunnel();
 
-proc.on('close', (code) => {
-  console.log(`[INFO] Cloudflare process exited with code ${code}`);
-});
+// 3. Keep-alive sync ke Supabase setiap 45 detik agar URL selalu segar di baris teratas
+setInterval(() => {
+  if (currentActiveUrl) {
+    syncToSupabase(currentActiveUrl);
+  }
+}, 45000);
 
-// 3. Listener Perintah PTZ dari Remote / Vercel (Cloud D-Pad Bridge)
+// 4. Listener Perintah PTZ dari Remote / Vercel (Cloud D-Pad Bridge)
 let lastProcessedPtzTime = Date.now();
 const ptzScriptPath = path.join(__dirname, 'ezviz_ptz_service.py');
 
@@ -114,6 +144,7 @@ setInterval(async () => {
 }, 500);
 
 process.on('SIGINT', () => {
-  proc.kill();
+  isStopping = true;
+  if (proc) proc.kill();
   process.exit(0);
 });
