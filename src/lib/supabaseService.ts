@@ -239,17 +239,17 @@ export const supabaseControlService = {
 
   // 5. Motorized Valve 1 (Panas) & Valve 2 (Dingin)
   setValve1Percent: async (percent: number) => {
-    const parsed = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    const parsed = Math.min(100, Math.max(10, Math.round(percent)));
     return updateDeviceControls({ servo_angle: parsed });
   },
 
   setValve2Percent: async (percent: number) => {
-    const parsed = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    const parsed = Math.min(100, Math.max(10, Math.round(percent)));
     return updateDeviceControls({ servo_angle_2: parsed });
   },
 
   setServoAngle: async (servoAngle: number) => {
-    const parsedInt = Math.min(100, Math.max(0, Math.round(servoAngle / 20) * 20));
+    const parsedInt = Math.min(100, Math.max(10, Math.round(servoAngle)));
     return updateDeviceControls({ servo_angle: parsedInt });
   },
 

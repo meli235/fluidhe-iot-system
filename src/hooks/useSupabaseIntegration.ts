@@ -116,6 +116,10 @@ export function useSupabaseIntegration() {
         setDeviceControls((prev) => ({
           ...prev,
           ...controlsData,
+          target_temp_hot: controlsData.target_temp_hot !== undefined ? controlsData.target_temp_hot : (controlsData.target_temp ?? 50.0),
+          tolerance_level: controlsData.tolerance_level !== undefined ? controlsData.tolerance_level : 1,
+          upper_limit: controlsData.upper_limit !== undefined ? controlsData.upper_limit : (controlsData.target_upper ?? 51.0),
+          lower_limit: controlsData.lower_limit !== undefined ? controlsData.lower_limit : (controlsData.target_lower ?? 49.0),
           heater_1_status: h1,
           heater_2_status: h2,
           heater_status: h1 || h2,
@@ -194,6 +198,15 @@ export function useSupabaseIntegration() {
                 heater_1_status: prev.heater_1_status,
                 heater_2_status: prev.heater_2_status,
                 target_temp: prev.target_temp,
+                target_temp_hot: prev.target_temp_hot,
+                tolerance_level: prev.tolerance_level,
+                upper_limit: prev.upper_limit,
+                lower_limit: prev.lower_limit,
+                target_upper: prev.target_upper,
+                target_lower: prev.target_lower,
+                flow_calibration_factor: prev.flow_calibration_factor,
+                temp_offset: prev.temp_offset,
+                pressure_offset: prev.pressure_offset,
                 servo_angle: prev.servo_angle,
                 servo_angle_2: prev.servo_angle_2,
                 air_dingin: prev.air_dingin,
@@ -211,6 +224,13 @@ export function useSupabaseIntegration() {
             return {
               ...prev,
               ...data,
+              target_temp_hot: data.target_temp_hot !== undefined ? data.target_temp_hot : (prev.target_temp_hot ?? data.target_temp ?? 50.0),
+              tolerance_level: data.tolerance_level !== undefined ? data.tolerance_level : (prev.tolerance_level ?? 1),
+              upper_limit: data.upper_limit !== undefined ? data.upper_limit : (data.target_upper ?? prev.upper_limit),
+              lower_limit: data.lower_limit !== undefined ? data.lower_limit : (data.target_lower ?? prev.lower_limit),
+              flow_calibration_factor: data.flow_calibration_factor !== undefined ? data.flow_calibration_factor : prev.flow_calibration_factor,
+              temp_offset: data.temp_offset !== undefined ? data.temp_offset : prev.temp_offset,
+              pressure_offset: data.pressure_offset !== undefined ? data.pressure_offset : prev.pressure_offset,
               heater_1_status: h1,
               heater_2_status: h2,
               heater_status: h1 || h2,
@@ -536,7 +556,7 @@ export function useSupabaseIntegration() {
   const handleValve1Change = async (percent: number) => {
     lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
-    const clamped = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    const clamped = Math.min(100, Math.max(10, percent));
     setDeviceControls((prev) => ({ ...prev, servo_angle: clamped }));
     const result = await supabaseControlService.setValve1Percent(clamped);
     setIsUpdatingControl(false);
@@ -552,7 +572,7 @@ export function useSupabaseIntegration() {
   const handleValve2Change = async (percent: number) => {
     lastUserActionTimeRef.current = Date.now();
     setIsUpdatingControl(true);
-    const clamped = Math.min(100, Math.max(0, Math.round(percent / 20) * 20));
+    const clamped = Math.min(100, Math.max(10, percent));
     setDeviceControls((prev) => ({ ...prev, servo_angle_2: clamped }));
     const result = await supabaseControlService.setValve2Percent(clamped);
     setIsUpdatingControl(false);

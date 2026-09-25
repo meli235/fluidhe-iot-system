@@ -11,8 +11,13 @@ const VALID_COLUMNS = new Set([
   'heater_1_status',
   'heater_2_status',
   'target_temp',
-  'target_upper',
-  'target_lower',
+  'target_temp_hot',
+  'tolerance_level',
+  'upper_limit',
+  'lower_limit',
+  'flow_calibration_factor',
+  'temp_offset',
+  'pressure_offset',
   'target_flow',
   'servo_angle',
   'servo_angle_2',
@@ -85,6 +90,14 @@ export async function GET(req: NextRequest) {
 
     const data = await res.json();
     const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
+    if (row) {
+      if (row.upper_limit !== undefined && row.target_upper === undefined) {
+        row.target_upper = row.upper_limit;
+      }
+      if (row.lower_limit !== undefined && row.target_lower === undefined) {
+        row.target_lower = row.lower_limit;
+      }
+    }
     return NextResponse.json({ data: row });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -108,6 +121,28 @@ export async function PATCH(req: NextRequest) {
       mappedBody.heater_status = Boolean(mappedBody.heater_1_status || mappedBody.heater_2_status);
     } else if ('heater_status' in mappedBody) {
       mappedBody.heater_status = Boolean(mappedBody.heater_status);
+    }
+
+    // Sinkronisasi timbal balik target_temp dan target_temp_hot (Kontrol Point)
+    if ('target_temp_hot' in mappedBody && !('target_temp' in mappedBody)) {
+      mappedBody.target_temp = mappedBody.target_temp_hot;
+    } else if ('target_temp' in mappedBody && !('target_temp_hot' in mappedBody)) {
+      mappedBody.target_temp_hot = mappedBody.target_temp;
+    }
+
+    // Sinkronisasi batas toleransi target_upper -> upper_limit & target_lower -> lower_limit
+    if ('target_upper' in mappedBody) {
+      if (!('upper_limit' in mappedBody)) {
+        mappedBody.upper_limit = mappedBody.target_upper;
+      }
+      delete mappedBody.target_upper;
+    }
+
+    if ('target_lower' in mappedBody) {
+      if (!('lower_limit' in mappedBody)) {
+        mappedBody.lower_limit = mappedBody.target_lower;
+      }
+      delete mappedBody.target_lower;
     }
 
     // Filter payload hanya ke kolom yang valid di database device_controls

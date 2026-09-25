@@ -11,12 +11,12 @@
 // ============================================================================
 // KREDENSIAL & KONFIGURASI WIFI
 // ============================================================================
-const char* WIFI_SSID     = "Iqdamir SH-12"; 
-const char* WIFI_PASSWORD = "1qd4m1r3m";
+const char* WIFI_SSID     = "Salafudin_4G"; 
+const char* WIFI_PASSWORD = "EhatEva1Yosep2";
 
 // Supabase Configuration
 String SUPABASE_URL = "https://kkxfbjpbaxnmgsnxrbpj.supabase.co";
-String SUPABASE_KEY = "YOUR_SUPABASE_KEY_HERE"; 
+String SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtreGZianBiYXhubWdzbnhyYnBqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTIxNDY2MCwiZXhwIjoyMTAwNzkwNjYwfQ.AotyhjikKONI3q1OatoEenQ4wS1rb3WcCoTROCqR7WU"; 
 
 // ============================================================================
 // PEMETAAN PIN ESP32
@@ -64,22 +64,27 @@ bool webUapCmd        = false;
 bool webAirDinginCmd  = false;
 int  webServoAngle    = 52;
 
-// Threshold Suhu untuk Logika 2 Heater
-float tempTarget      = 65.0; // Optimal (TI1 / TI2)
-float tempColdLimit   = 40.0; // Terlalu dingin (Y)
-float tempHotLimit    = 80.0; // Terlalu panas (Z)
+// Thermostat Setup (Kontrol Point & Level Toleransi P1–P7)
+float kontrolPointHot       = 50.0; // Target Kontrol Point (°C)
+int   toleranceLevel        = 1;    // Level Toleransi P1 - P7 (±1.0 - ±7.0 °C)
+float upperLimit            = 51.0; // Batas Atas Histeresis (Heater 2 Booster OFF)
+float lowerLimit            = 49.0; // Batas Bawah Histeresis (Heater 2 Booster ON)
+
+// Variabel Kalibrasi Dinamis Sensor
+float flowCalibrationFactor = 7.90; // Default kalibrasi flow YF-B1
+float tempOffset            = 0.00; // Offset kalibrasi suhu (°C)
+float pressureOffset        = 0.00; // Offset kalibrasi tekanan (bar)
 
 // 1. Variabel Tekanan & Delta (PI1, PI2, PI3, PI4)
 float pi1_hotInlet    = 0.00, pi2_hotOutlet = 0.00, deltaHotPress   = 0.00; 
 float pi3_coldInlet   = 0.00, pi4_coldOutlet = 0.00, deltaColdPress  = 0.00; 
 
-// 2. Variabel Flow Rate (FC1 & FC2) + Kalibrasi YF-B1
+// 2. Variabel Flow Rate (FC1 & FC2)
 volatile long pulseCount1 = 0;
 volatile long pulseCount2 = 0;
 float fc1_hotFlow     = 0.00; // L/min
 float fc2_coldFlow    = 0.00; // L/min
 unsigned long oldTime = 0;
-const float calibrationFactor = 7.90; // Faktor kalibrasi hasil uji wadah
 
 // 3. Variabel Suhu (TI1, TI2, TI3, TI4)
 float ti1_hotInlet    = 0.00;
@@ -231,37 +236,38 @@ void syncAndExecuteSensorsAndRelays() {
     float freq1 = ((float)p1 / (float)elapsedTime) * 1000.0;
     float freq2 = ((float)p2 / (float)elapsedTime) * 1000.0;
 
-    // Hitung Debit (L/min) dengan rumus kalibrasi
-    fc1_hotFlow = freq1 / calibrationFactor;
-    fc2_coldFlow = freq2 / calibrationFactor;
+    // Hitung Debit (L/min) dengan rumus kalibrasi dinamis
+    float activeCal = (flowCalibrationFactor > 0.5) ? flowCalibrationFactor : 7.90;
+    fc1_hotFlow = freq1 / activeCal;
+    fc2_coldFlow = freq2 / activeCal;
   }
 
   // =========================================================================
-  // 2. PEMBACAAN 4 SENSOR SUHU (TI1, TI2, TI3, TI4)
+  // 2. PEMBACAAN 4 SENSOR SUHU (TI1, TI2, TI3, TI4) + OFFSET KALIBRASI
   // =========================================================================
   sensors.requestTemperatures(); 
-  ti1_hotInlet   = sensors.getTempCByIndex(0);
-  ti2_hotOutlet  = sensors.getTempCByIndex(1);
-  ti3_coldInlet  = sensors.getTempCByIndex(2);
-  ti4_coldOutlet = sensors.getTempCByIndex(3);
+  float rawTi1 = sensors.getTempCByIndex(0);
+  float rawTi2 = sensors.getTempCByIndex(1);
+  float rawTi3 = sensors.getTempCByIndex(2);
+  float rawTi4 = sensors.getTempCByIndex(3);
 
-  if (ti1_hotInlet == DEVICE_DISCONNECTED_C)   ti1_hotInlet = 0.00;
-  if (ti2_hotOutlet == DEVICE_DISCONNECTED_C)  ti2_hotOutlet = 0.00;
-  if (ti3_coldInlet == DEVICE_DISCONNECTED_C)  ti3_coldInlet = 0.00;
-  if (ti4_coldOutlet == DEVICE_DISCONNECTED_C) ti4_coldOutlet = 0.00;
+  ti1_hotInlet   = (rawTi1 == DEVICE_DISCONNECTED_C) ? 0.00 : (rawTi1 + tempOffset);
+  ti2_hotOutlet  = (rawTi2 == DEVICE_DISCONNECTED_C) ? 0.00 : (rawTi2 + tempOffset);
+  ti3_coldInlet  = (rawTi3 == DEVICE_DISCONNECTED_C) ? 0.00 : (rawTi3 + tempOffset);
+  ti4_coldOutlet = (rawTi4 == DEVICE_DISCONNECTED_C) ? 0.00 : (rawTi4 + tempOffset);
 
   // =========================================================================
-  // 3. PEMBACAAN 4 SENSOR TEKANAN & DELTA (PI1, PI2, PI3, PI4)
+  // 3. PEMBACAAN 4 SENSOR TEKANAN & DELTA (PI1, PI2, PI3, PI4) + OFFSET KALIBRASI
   // =========================================================================
   int16_t adcPi1 = ads.readADC_SingleEnded(0); // PI1 (Hot Inlet)
   int16_t adcPi2 = ads.readADC_SingleEnded(1); // PI2 (Hot Outlet)
   int16_t adcPi3 = ads.readADC_SingleEnded(2); // PI3 (Cold Inlet)
   int16_t adcPi4 = ads.readADC_SingleEnded(3); // PI4 (Cold Outlet)
 
-  pi1_hotInlet   = ads.computeVolts(adcPi1) * 5.00; // Konversi ke bar/atm
-  pi2_hotOutlet  = ads.computeVolts(adcPi2) * 5.00;
-  pi3_coldInlet  = ads.computeVolts(adcPi3) * 5.00;
-  pi4_coldOutlet = ads.computeVolts(adcPi4) * 5.00;
+  pi1_hotInlet   = (ads.computeVolts(adcPi1) * 5.00) + pressureOffset; // Konversi ke bar/atm
+  pi2_hotOutlet  = (ads.computeVolts(adcPi2) * 5.00) + pressureOffset;
+  pi3_coldInlet  = (ads.computeVolts(adcPi3) * 5.00) + pressureOffset;
+  pi4_coldOutlet = (ads.computeVolts(adcPi4) * 5.00) + pressureOffset;
 
   if (pi1_hotInlet < 0) pi1_hotInlet = 0;
   if (pi2_hotOutlet < 0) pi2_hotOutlet = 0;
@@ -279,7 +285,7 @@ void syncAndExecuteSensorsAndRelays() {
   client.setInsecure(); // Skip SSL certificate verification for HTTPS
 
   HTTPClient http;
-  String endpoint = SUPABASE_URL + "/rest/v1/device_controls?id=eq.1";
+  String endpoint = SUPABASE_URL + "/rest/v1/device_controls?id=eq.1&select=*";
   
   http.begin(client, endpoint);
   http.addHeader("apikey", SUPABASE_KEY);
@@ -290,9 +296,10 @@ void syncAndExecuteSensorsAndRelays() {
   
   if (httpCode > 0 && httpCode == 200) {
     String payload = http.getString();
-    StaticJsonDocument<512> doc;
+    DynamicJsonDocument doc(2048);
+    DeserializationError err = deserializeJson(doc, payload);
     
-    if (!deserializeJson(doc, payload)) {
+    if (!err) {
       JsonObject obj = doc[0];
       
       if (obj.containsKey("flow_mode")) {
@@ -311,24 +318,85 @@ void syncAndExecuteSensorsAndRelays() {
       
       bool heaterStatusWeb = obj["heater_status"] | false;
 
+      // --- SINKRONISASI THERMOSTAT SETUP (KONTROL POINT & LEVEL P1-P7) ---
+      if (obj.containsKey("target_temp_hot")) {
+        kontrolPointHot = obj["target_temp_hot"].as<float>();
+      } else if (obj.containsKey("target_temp")) {
+        kontrolPointHot = obj["target_temp"].as<float>();
+      }
+
+      if (obj.containsKey("tolerance_level")) {
+        toleranceLevel = obj["tolerance_level"].as<int>();
+      }
+
+      if (obj.containsKey("upper_limit")) {
+        upperLimit = obj["upper_limit"].as<float>();
+      } else if (obj.containsKey("target_upper")) {
+        upperLimit = obj["target_upper"].as<float>();
+      } else {
+        upperLimit = kontrolPointHot + toleranceLevel;
+      }
+
+      if (obj.containsKey("lower_limit")) {
+        lowerLimit = obj["lower_limit"].as<float>();
+      } else if (obj.containsKey("target_lower")) {
+        lowerLimit = obj["target_lower"].as<float>();
+      } else {
+        lowerLimit = kontrolPointHot - toleranceLevel;
+      }
+
+      // --- SINKRONISASI KALIBRASI SENSOR DINAMIS ---
+      if (obj.containsKey("flow_calibration_factor")) {
+        float fc = obj["flow_calibration_factor"].as<float>();
+        if (fc > 0.5) flowCalibrationFactor = fc;
+      }
+      if (obj.containsKey("temp_offset")) {
+        tempOffset = obj["temp_offset"].as<float>();
+      }
+      if (obj.containsKey("pressure_offset")) {
+        pressureOffset = obj["pressure_offset"].as<float>();
+      }
+
       // -------------------------------------------------------------
       // LOGIKA KONTROL WATER HEATER (AUTO / MANUAL)
       // -------------------------------------------------------------
       if (controlMode == "AUTO") {
-        if (ti1_hotInlet >= tempHotLimit || ti2_hotOutlet >= tempHotLimit) {
-          webHeater1Cmd = false;
+        // Kontrol Histeresis Otomatis Berbasis Kontrol Point & Toleransi P1-P7
+        float refTemp = (ti1_hotInlet > 0.0) ? ti1_hotInlet : ti2_hotOutlet;
+
+        if (refTemp >= upperLimit) {
+          // Suhu mencapai batas atas toleransi: Matikan Heater 2 (Booster)
           webHeater2Cmd = false;
-        } else if (ti1_hotInlet <= tempColdLimit && ti2_hotOutlet <= tempColdLimit) {
+          if (refTemp >= upperLimit + 2.0) {
+            // Cutoff darurat pemanas utama jika melebihi batas atas + 2°C
+            webHeater1Cmd = false;
+          } else {
+            webHeater1Cmd = true;
+          }
+        } else if (refTemp <= lowerLimit) {
+          // Suhu di bawah batas toleransi: Nyalakan Heater 1 dan Heater 2 Booster
           webHeater1Cmd = true;
           webHeater2Cmd = true;
         } else {
+          // Berada di dalam rentang Kontrol Point: Heater 1 ON menjaga suhu, Heater 2 OFF
           webHeater1Cmd = true;
           webHeater2Cmd = false;
         }
       } else {
-        // Mode MANUAL: Mengikuti tombol On/Off dari Web Next.js
-        webHeater1Cmd = heaterStatusWeb;
-        webHeater2Cmd = heaterStatusWeb;
+        // Mode MANUAL: Mengikuti switch independen Heater 1 dan Heater 2 dari Dashboard
+        if (obj.containsKey("heater_1_status")) {
+          webHeater1Cmd = obj["heater_1_status"].as<bool>();
+        } else if (obj.containsKey("btn_onoff")) {
+          webHeater1Cmd = obj["btn_onoff"].as<bool>();
+        } else {
+          webHeater1Cmd = heaterStatusWeb;
+        }
+
+        if (obj.containsKey("heater_2_status")) {
+          webHeater2Cmd = obj["heater_2_status"].as<bool>();
+        } else {
+          webHeater2Cmd = heaterStatusWeb;
+        }
       }
 
       // --- EKSEKUSI RELAY SOLENOID MODE (Default: COUNTER) ---
@@ -338,7 +406,7 @@ void syncAndExecuteSensorsAndRelays() {
         digitalWrite(PIN_FLOW_CONTROL, HIGH); // Default COUNTER
       }
 
-      // --- EKSEKUSI RELAY HEATER & SERVO LEMBUT UNTUK HEATER 1 ---
+      // --- EKSEKUSI RELAY HEATER & SERVO UNTUK HEATER 1 ---
       digitalWrite(PIN_HEATER_1, webHeater1Cmd ? LOW : HIGH);
       digitalWrite(PIN_HEATER_2, webHeater2Cmd ? LOW : HIGH);
 

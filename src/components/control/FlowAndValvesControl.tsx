@@ -20,7 +20,14 @@ interface FlowAndValvesControlProps {
   onChangeTargetFlow?: (val: number) => void;
 }
 
-const VALVE_TICKS = [0, 20, 40, 60, 80, 100];
+const VALVE_TICKS = [10, 20, 40, 60, 80, 100];
+
+// Cari tick terdekat saat slider digeser
+const snapToNearestTick = (val: number): number => {
+  return VALVE_TICKS.reduce((prev, curr) =>
+    Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev
+  );
+};
 
 export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
   controlMode,
@@ -67,29 +74,32 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
             </span>
           </div>
 
-          {/* Pure Slider Control (Step 20: 0, 20, 40, 60, 80, 100) */}
+          {/* Slider Control (Rentang: 10, 20, 40, 60, 80, 100) */}
           <div className="space-y-2 pt-1">
             <input
               type="range"
-              min="0"
+              min="10"
               max="100"
-              step="20"
-              value={fc1Valve}
-              onChange={(e) => onChangeFc1Valve(Number(e.target.value))}
+              step="5"
+              value={Math.max(10, fc1Valve)}
+              onChange={(e) => onChangeFc1Valve(snapToNearestTick(Number(e.target.value)))}
               disabled={emergencyStopped || isAuto}
               className={`w-full h-2.5 bg-slate-200 rounded-lg appearance-none accent-rose-500 transition-all ${
                 isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
               }`}
             />
-            {/* Scale Ticks: 0%, 20%, 40%, 60%, 80%, 100% */}
+            {/* Scale Ticks: 10%, 20%, 40%, 60%, 80%, 100% */}
             <div className="flex justify-between text-[10px] font-bold text-slate-500 px-0.5">
               {VALVE_TICKS.map((tick) => (
-                <span
+                <button
                   key={tick}
-                  className={`transition-all ${fc1Valve === tick ? 'text-rose-600 font-black scale-110' : 'text-slate-400'}`}
+                  type="button"
+                  disabled={emergencyStopped || isAuto}
+                  onClick={() => onChangeFc1Valve(tick)}
+                  className={`transition-all hover:text-rose-600 cursor-pointer ${fc1Valve === tick ? 'text-rose-600 font-black scale-110' : 'text-slate-400'}`}
                 >
                   {tick}%
-                </span>
+                </button>
               ))}
             </div>
           </div>
@@ -107,29 +117,32 @@ export const FlowAndValvesControl: React.FC<FlowAndValvesControlProps> = ({
             </span>
           </div>
 
-          {/* Pure Slider Control (Step 20: 0, 20, 40, 60, 80, 100) */}
+          {/* Slider Control (Rentang: 10, 20, 40, 60, 80, 100) */}
           <div className="space-y-2 pt-1">
             <input
               type="range"
-              min="0"
+              min="10"
               max="100"
-              step="20"
-              value={fc2Valve}
-              onChange={(e) => onChangeFc2Valve(Number(e.target.value))}
+              step="5"
+              value={Math.max(10, fc2Valve)}
+              onChange={(e) => onChangeFc2Valve(snapToNearestTick(Number(e.target.value)))}
               disabled={emergencyStopped || isAuto}
               className={`w-full h-2.5 bg-slate-200 rounded-lg appearance-none accent-sky-600 transition-all ${
                 isAuto ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
               }`}
             />
-            {/* Scale Ticks: 0%, 20%, 40%, 60%, 80%, 100% */}
+            {/* Scale Ticks: 10%, 20%, 40%, 60%, 80%, 100% */}
             <div className="flex justify-between text-[10px] font-bold text-slate-500 px-0.5">
               {VALVE_TICKS.map((tick) => (
-                <span
+                <button
                   key={tick}
-                  className={`transition-all ${fc2Valve === tick ? 'text-sky-600 font-black scale-110' : 'text-slate-400'}`}
+                  type="button"
+                  disabled={emergencyStopped || isAuto}
+                  onClick={() => onChangeFc2Valve(tick)}
+                  className={`transition-all hover:text-sky-600 cursor-pointer ${fc2Valve === tick ? 'text-sky-600 font-black scale-110' : 'text-slate-400'}`}
                 >
                   {tick}%
-                </span>
+                </button>
               ))}
             </div>
           </div>
