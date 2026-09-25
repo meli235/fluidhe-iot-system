@@ -3518,6 +3518,23 @@ export default function FluidHEDashboard() {
               </div>
               Alarm System
             </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('cctv');
+                setIsSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'cctv'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Video className="w-4 h-4 shrink-0" />
+                <span className="truncate">CCTV Feed</span>
+              </div>
+              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-extrabold border border-emerald-200 shrink-0">Live</span>
+            </button>
           </nav>
 
           {currentUser.role === 'admin' && (
@@ -3539,23 +3556,6 @@ export default function FluidHEDashboard() {
                 <div className="flex items-center gap-3 min-w-0">
                   <FolderKanban className="w-4 h-4 shrink-0" />
                   <span className="truncate whitespace-nowrap">Data Praktikum</span>
-                </div>
-                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab('cctv');
-                  setIsSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'cctv'
-                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Video className="w-4 h-4 shrink-0" />
-                  <span className="truncate">CCTV Feed</span>
                 </div>
                 <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[10px] font-extrabold border border-sky-200 shrink-0">Admin</span>
               </button>
@@ -4120,8 +4120,8 @@ export default function FluidHEDashboard() {
             </div>
           )}
 
-          {/* TAB 3: CCTV LIVE MONITORING (ADMIN ONLY) */}
-          {activeTab === 'cctv' && currentUser.role === 'admin' && (
+          {/* TAB 3: CCTV LIVE MONITORING */}
+          {activeTab === 'cctv' && (
             <CctvTab
               selectedCamera={selectedCamera}
               setSelectedCamera={setSelectedCamera}
@@ -4654,25 +4654,42 @@ export default function FluidHEDashboard() {
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('alarms');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'alarms'
-                ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
-                : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
-                }`}
-            >
-              <div className="relative">
-                <Bell className="w-4.5 h-4.5 shrink-0" />
-                {alarmLogs.some(a => !a.acknowledged) && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
-                )}
-              </div>
-              <span className="text-[9.5px] leading-none truncate w-full text-center">Alarm</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('cctv');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'cctv'
+                  ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
+                  : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+                  }`}
+              >
+                <Video className="w-4.5 h-4.5 shrink-0" />
+                <span className="text-[9.5px] leading-none truncate w-full text-center">CCTV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('alarms');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-0.5 rounded-xl transition-all active:scale-95 cursor-pointer ${activeTab === 'alarms'
+                  ? 'text-sky-600 font-black bg-sky-50/90 shadow-2xs'
+                  : 'text-slate-500 font-semibold hover:text-slate-800 active:bg-slate-100'
+                  }`}
+              >
+                <div className="relative">
+                  <Bell className="w-4.5 h-4.5 shrink-0" />
+                  {alarmLogs.some(a => !a.acknowledged) && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                  )}
+                </div>
+                <span className="text-[9.5px] leading-none truncate w-full text-center">Alarm</span>
+              </button>
+            </>
           )}
         </nav>
       )}
