@@ -17,6 +17,22 @@ import {
 } from '@/lib/supabaseService';
 
 /**
+ * Helper untuk memfilter hanya paket telemetri hardware valid dari sensor ESP32
+ */
+export const isHardwareTelemetryRow = (r: TelemetryRow | null | undefined): boolean => {
+  if (!r) return false;
+  const ws = String(r.warning_status || '');
+  if (ws.startsWith('CCTV_URL:') || ws.startsWith('PTZ_CMD:')) {
+    return false;
+  }
+  // Tolak paket tiruan jika seluruh nilai suhu 0 dan bukan data normal
+  if (r.temp_1 === 0 && r.temp_2 === 0 && r.temp_3 === 0 && r.temp_4 === 0 && r.pressure === 0 && ws !== 'NORMAL') {
+    return false;
+  }
+  return true;
+};
+
+/**
  * Custom Hook untuk Integrasi Real-Time Telemetri & Kontrol Dua Arah ESP32 (Supabase)
  */
 export function useSupabaseIntegration() {
@@ -88,9 +104,14 @@ export function useSupabaseIntegration() {
         }
         setConnectionStatus('ERROR');
       } else if (initialTelemetry && initialTelemetry.length > 0) {
-        setTelemetryStream(initialTelemetry);
-        setLatestTelemetry(initialTelemetry[initialTelemetry.length - 1]);
-        setConnectionStatus('ONLINE');
+        const cleanTelemetry = initialTelemetry.filter(isHardwareTelemetryRow);
+        if (cleanTelemetry.length > 0) {
+          setTelemetryStream(cleanTelemetry);
+          setLatestTelemetry(cleanTelemetry[cleanTelemetry.length - 1]);
+          setConnectionStatus('ONLINE');
+          setLastHardwareHeartbeat(Date.now());
+          setIsHardwareOnline(true);
+        }
       }
 
       // 2. Fetch initial device controls
@@ -145,45 +166,50 @@ export function useSupabaseIntegration() {
   useEffect(() => {
     initializeData();
 
-    // Polling Interval Fallback (Setiap 2 Detik) untuk Menjamin Update Real-Time Selalu Tampak
+    // Polling Interval Super Cepat (Setiap 1 Detik / 1000ms) untuk Sinkronisasi Real-Time Tanpa Delay
     const pollInterval = setInterval(() => {
-      fetchLatestTelemetry(500).then(({ data, error }) => {
+      fetchLatestTelemetry(200).then(({ data, error }) => {
         if (!error && data && data.length > 0) {
-          setTelemetryStream((prev) => {
-            if (prev.length === 0) return data;
-            const existingMap = new Map<string | number, TelemetryRow>();
-            prev.forEach((r) => {
-              const k = r.id ?? r.created_at;
-              if (k) existingMap.set(k, r);
+          const cleanData = data.filter(isHardwareTelemetryRow);
+          if (cleanData.length > 0) {
+            setTelemetryStream((prev) => {
+              if (prev.length === 0) return cleanData;
+              const existingMap = new Map<string | number, TelemetryRow>();
+              prev.forEach((r) => {
+                const k = r.id ?? r.created_at;
+                if (k) existingMap.set(k, r);
+              });
+              cleanData.forEach((r) => {
+                const k = r.id ?? r.created_at;
+                if (k) existingMap.set(k, r);
+              });
+              const merged = Array.from(existingMap.values());
+              merged.sort((a, b) => {
+                const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return timeA - timeB;
+              });
+              return merged.slice(-1500);
             });
-            data.forEach((r) => {
-              const k = r.id ?? r.created_at;
-              if (k) existingMap.set(k, r);
-            });
-            const merged = Array.from(existingMap.values());
-            merged.sort((a, b) => {
-              const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-              const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-              return timeA - timeB;
-            });
-            return merged.slice(-1500);
-          });
-          const latest = data[data.length - 1];
-          setLatestTelemetry(latest);
-          setConnectionStatus('ONLINE');
-          setErrorMessage(null);
+            const latest = cleanData[cleanData.length - 1];
+            setLatestTelemetry(latest);
+            setConnectionStatus('ONLINE');
+            setErrorMessage(null);
 
-          // Check if latest telemetry row was produced recently (tolerance 120 seconds to handle network latency & clock drift)
-          if (latest.created_at) {
-            const rowTime = new Date(latest.created_at).getTime();
-            if (!isNaN(rowTime) && Math.abs(Date.now() - rowTime) < 120000) {
-              setLastHardwareHeartbeat(Date.now());
-              setIsHardwareOnline(true);
+            // Periksa waktu dibuatnya telemetri (toleransi 25 detik)
+            if (latest.created_at) {
+              const rowTime = new Date(latest.created_at).getTime();
+              if (!isNaN(rowTime) && Math.abs(Date.now() - rowTime) < 25000) {
+                setLastHardwareHeartbeat(Date.now());
+                setIsHardwareOnline(true);
+              }
             }
           }
         }
       });
+    }, 1000);
 
+    const controlsPollInterval = setInterval(() => {
       fetchDeviceControls().then(({ data, error }) => {
         if (!error && data) {
           const isRecentlyUpdatedByUser = (Date.now() - lastUserActionTimeRef.current < 6000);
@@ -259,6 +285,10 @@ export function useSupabaseIntegration() {
         { event: 'INSERT', schema: 'public', table: 'telemetry_data' },
         (payload) => {
           const newRow = payload.new as TelemetryRow;
+          // Abaikan sinyal CCTV URL atau perintah PTZ kamera dari aliran sensor
+          if (!isHardwareTelemetryRow(newRow)) {
+            return;
+          }
           setLatestTelemetry(newRow);
           setTelemetryStream((prev) => {
             const exists = prev.some((r) => (r.id && newRow.id && r.id === newRow.id) || (r.created_at && newRow.created_at && r.created_at === newRow.created_at));
@@ -337,20 +367,21 @@ export function useSupabaseIntegration() {
 
     return () => {
       clearInterval(pollInterval);
+      clearInterval(controlsPollInterval);
       supabase.removeChannel(telemetryChannel);
       supabase.removeChannel(controlsChannel);
     };
   }, [initializeData]);
 
-  // Periodic heartbeat watchdog to mark hardware offline if no packet for > 45s
+  // Periodic heartbeat watchdog to mark hardware offline if no packet for > 25s
   useEffect(() => {
     const watchdog = setInterval(() => {
-      if (lastHardwareHeartbeat && (Date.now() - lastHardwareHeartbeat < 45000)) {
+      if (lastHardwareHeartbeat && (Date.now() - lastHardwareHeartbeat < 25000)) {
         setIsHardwareOnline(true);
       } else {
         setIsHardwareOnline(false);
       }
-    }, 2000);
+    }, 1000);
     return () => clearInterval(watchdog);
   }, [lastHardwareHeartbeat]);
 

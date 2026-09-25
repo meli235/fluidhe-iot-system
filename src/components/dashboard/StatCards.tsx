@@ -18,6 +18,20 @@ export const StatCards: React.FC<StatCardsProps> = ({
   latestData,
   isHardwareOnline = false,
 }) => {
+  const [typingDots, setTypingDots] = React.useState('');
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setTypingDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
+    }, 450);
+    return () => clearInterval(interval);
+  }, []);
+
+  const hasHardwareData = isHardwareOnline && (
+    (supabaseTelemetry !== null && (supabaseTelemetry.temp_1 > 0 || supabaseTelemetry.temp_2 > 0)) ||
+    (latestData.ti1 > 0 || latestData.ti2 > 0)
+  );
+
   const t1 = supabaseTelemetry ? supabaseTelemetry.temp_1 : latestData.ti1;
   const t2 = supabaseTelemetry ? supabaseTelemetry.temp_2 : latestData.ti2;
   const t3 = supabaseTelemetry ? supabaseTelemetry.temp_3 : latestData.ti3;
@@ -42,8 +56,8 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-sky-600" /> Suhu & Debit Aliran Real-Time
           </h3>
-          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${isHardwareOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-            {isHardwareOnline ? 'Online' : 'Menunggu Alat'}
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border transition-all ${hasHardwareData ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'}`}>
+            {hasHardwareData ? 'Online' : `Menunggu jaringan${typingDots}`}
           </span>
         </div>
 
@@ -52,7 +66,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t1}</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${t1.toFixed(1)} °C` : '--'}
+              {hasHardwareData ? `${t1.toFixed(1)} °C` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -60,7 +74,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t2}</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${t2.toFixed(1)} °C` : '--'}
+              {hasHardwareData ? `${t2.toFixed(1)} °C` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -68,7 +82,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t3}</span>
             <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${t3.toFixed(1)} °C` : '--'}
+              {hasHardwareData ? `${t3.toFixed(1)} °C` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -76,7 +90,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-sky-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">{tempLabels.t4}</span>
             <strong className="text-sky-700 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${t4.toFixed(1)} °C` : '--'}
+              {hasHardwareData ? `${t4.toFixed(1)} °C` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -87,7 +101,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
               <span>Debit Panas (FC1)</span>
             </div>
             <strong className="text-amber-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${fc1.toFixed(2)} L/m` : '--'}
+              {hasHardwareData ? `${fc1.toFixed(2)} L/m` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -98,7 +112,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
               <span>Debit Dingin (FC2)</span>
             </div>
             <strong className="text-sky-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${fc2.toFixed(2)} L/m` : '--'}
+              {hasHardwareData ? `${fc2.toFixed(2)} L/m` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
         </div>
@@ -110,8 +124,8 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
             <Gauge className="w-4 h-4 text-emerald-600" /> Tekanan Fluida & Delta Tekanan (ΔP)
           </h3>
-          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${isHardwareOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-            {isHardwareOnline ? 'Online' : 'Menunggu Alat'}
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border transition-all ${hasHardwareData ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'}`}>
+            {hasHardwareData ? 'Online' : `Menunggu jaringan${typingDots}`}
           </span>
         </div>
 
@@ -120,7 +134,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI1 (Inlet Panas)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${pi1.toFixed(2)} Bar` : '--'}
+              {hasHardwareData ? `${pi1.toFixed(2)} Bar` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -128,7 +142,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI2 (Outlet Panas)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${pi2.toFixed(2)} Bar` : '--'}
+              {hasHardwareData ? `${pi2.toFixed(2)} Bar` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -136,7 +150,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 shadow-2xs hover:border-emerald-300 transition-all">
             <span className="text-[10px] text-emerald-800 font-bold block truncate">ΔP1 (P1 – P2 Panas)</span>
             <strong className="text-emerald-700 font-black text-sm sm:text-base">
-              {isHardwareOnline ? (deltaP1 >= 0 ? `+${deltaP1.toFixed(2)} Bar` : `${deltaP1.toFixed(2)} Bar`) : '--'}
+              {hasHardwareData ? (deltaP1 >= 0 ? `+${deltaP1.toFixed(2)} Bar` : `${deltaP1.toFixed(2)} Bar`) : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -144,7 +158,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI3 (Inlet Dingin)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${pi3.toFixed(2)} Bar` : '--'}
+              {hasHardwareData ? `${pi3.toFixed(2)} Bar` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -152,7 +166,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
             <span className="text-[10px] text-slate-500 font-semibold block truncate">PI4 (Outlet Dingin)</span>
             <strong className="text-slate-900 font-extrabold text-sm sm:text-base">
-              {isHardwareOnline ? `${pi4.toFixed(2)} Bar` : '--'}
+              {hasHardwareData ? `${pi4.toFixed(2)} Bar` : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
 
@@ -160,7 +174,7 @@ export const StatCards: React.FC<StatCardsProps> = ({
           <div className="p-3 bg-teal-50/70 rounded-2xl border border-teal-200 shadow-2xs hover:border-teal-300 transition-all">
             <span className="text-[10px] text-teal-800 font-bold block truncate">ΔP2 (P3 – P4 Dingin)</span>
             <strong className="text-teal-700 font-black text-sm sm:text-base">
-              {isHardwareOnline ? (deltaP2 >= 0 ? `+${deltaP2.toFixed(2)} Bar` : `${deltaP2.toFixed(2)} Bar`) : '--'}
+              {hasHardwareData ? (deltaP2 >= 0 ? `+${deltaP2.toFixed(2)} Bar` : `${deltaP2.toFixed(2)} Bar`) : <span className="text-[11px] text-amber-600 font-medium">Menunggu{typingDots}</span>}
             </strong>
           </div>
         </div>

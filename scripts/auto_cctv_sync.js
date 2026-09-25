@@ -105,14 +105,7 @@ function startTunnel() {
 
 startTunnel();
 
-// 3. Keep-alive sync ke Supabase setiap 45 detik agar URL selalu segar di baris teratas
-setInterval(() => {
-  if (currentActiveUrl) {
-    syncToSupabase(currentActiveUrl);
-  }
-}, 45000);
-
-// 4. Listener Perintah PTZ dari Remote / Vercel (Cloud D-Pad Bridge)
+// 3. Listener Perintah PTZ dari Remote / Vercel (Cloud D-Pad Bridge)
 let lastProcessedPtzTime = Date.now();
 const ptzScriptPath = path.join(__dirname, 'ezviz_ptz_service.py');
 

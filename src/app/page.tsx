@@ -1349,58 +1349,71 @@ export default function FluidHEDashboard() {
     }
   }, [operationMode]);
 
-  // ─── DUAL HEATER STAGED CONTROL LOGIC ───
+  // ─── DUAL HEATER STAGED CONTROL LOGIC & REALTIME SENSOR PRIORITIZATION ───
   const latestData = useMemo(() => {
-    if (telemetryHistory.length > 0) {
-      return telemetryHistory[telemetryHistory.length - 1];
-    }
+    // 1. Cek apakah baris telemetri merupakan data hardware asli (bukan sinyal CCTV / PTZ)
+    const isHardwareValid = (r: any) => {
+      if (!r) return false;
+      const ws = String(r.warning_status || '');
+      if (ws.startsWith('CCTV_URL:') || ws.startsWith('PTZ_CMD:')) return false;
+      if (r.temp_1 === 0 && r.temp_2 === 0 && r.temp_3 === 0 && r.temp_4 === 0 && r.pressure === 0 && ws !== 'NORMAL') return false;
+      return true;
+    };
 
-    if (telemetryHistory.length === 0) {
-      if (supabaseTelemetry) {
-        const isHeaterOn = supabaseTelemetry.heater_status === 'ON';
-        return {
-          timestamp: supabaseTelemetry.created_at
-            ? new Date(supabaseTelemetry.created_at).toLocaleTimeString('id-ID')
-            : new Date().toLocaleTimeString('id-ID'),
-          ti1: supabaseTelemetry.temp_1,
-          ti2: supabaseTelemetry.temp_2,
-          ti3: supabaseTelemetry.temp_3,
-          ti4: supabaseTelemetry.temp_4,
-          ti5: parseFloat(((supabaseTelemetry.temp_3 + supabaseTelemetry.temp_4) / 2).toFixed(1)),
-          ti6: parseFloat(((supabaseTelemetry.temp_1 + supabaseTelemetry.temp_2) / 2).toFixed(1)),
-          pi1: parseFloat(Number(supabaseTelemetry.pressure || 0).toFixed(2)),
-          pi2: supabaseTelemetry.pressure_outlet !== undefined ? parseFloat(Number(supabaseTelemetry.pressure_outlet).toFixed(2)) : parseFloat((Number(supabaseTelemetry.pressure || 0) * 0.82).toFixed(2)),
-          pi3: supabaseTelemetry.pressure_inlet_2 !== undefined ? parseFloat(Number(supabaseTelemetry.pressure_inlet_2).toFixed(2)) : parseFloat((Number(supabaseTelemetry.pressure || 0) * 0.90).toFixed(2)),
-          pi4: supabaseTelemetry.pressure_outlet_2 !== undefined ? parseFloat(Number(supabaseTelemetry.pressure_outlet_2).toFixed(2)) : parseFloat((Number(supabaseTelemetry.pressure || 0) * 0.72).toFixed(2)),
-          fc1: parseFloat(Number(supabaseTelemetry.flow_rate || 0).toFixed(1)),
-          fc2: supabaseTelemetry.flow_rate_2 !== undefined ? parseFloat(Number(supabaseTelemetry.flow_rate_2).toFixed(1)) : parseFloat((Number(supabaseTelemetry.flow_rate || 0) * 1.15).toFixed(1)),
-          tc1Setpoint: supabaseControls?.target_temp || tc1Setpoint,
-          heater1Active: isHeaterOn,
-          heater2Active: isHeaterOn,
-          mode: (supabaseControls?.flow_mode === 'COUNTER' ? 'Counter-Current' : 'Co-Current') as any
-        };
-      }
+    // Prioritaskan telemetri real-time tercepat langsung dari sensor Supabase
+    if (supabaseTelemetry && isHardwareValid(supabaseTelemetry)) {
+      const isHeaterOn = supabaseTelemetry.heater_status === 'ON' || Boolean(supabaseControls?.heater_1_status || supabaseControls?.heater_2_status);
       return {
-        timestamp: new Date().toLocaleTimeString('id-ID'),
-        ti1: 0,
-        ti2: 0,
-        ti3: 0,
-        ti4: 0,
-        ti5: 0,
-        ti6: 0,
-        pi1: 0,
-        pi2: 0,
-        pi3: 0,
-        pi4: 0,
-        fc1: 0,
-        fc2: 0,
-        tc1Setpoint: tc1Setpoint,
-        heater1Active: false,
-        heater2Active: false,
-        mode: operationMode
+        timestamp: supabaseTelemetry.created_at
+          ? new Date(supabaseTelemetry.created_at).toLocaleTimeString('id-ID')
+          : new Date().toLocaleTimeString('id-ID'),
+        created_at: supabaseTelemetry.created_at,
+        ti1: Number(supabaseTelemetry.temp_1 || 0),
+        ti2: Number(supabaseTelemetry.temp_2 || 0),
+        ti3: Number(supabaseTelemetry.temp_3 || 0),
+        ti4: Number(supabaseTelemetry.temp_4 || 0),
+        ti5: parseFloat(((Number(supabaseTelemetry.temp_3 || 0) + Number(supabaseTelemetry.temp_4 || 0)) / 2).toFixed(1)),
+        ti6: parseFloat(((Number(supabaseTelemetry.temp_1 || 0) + Number(supabaseTelemetry.temp_2 || 0)) / 2).toFixed(1)),
+        pi1: parseFloat(Number(supabaseTelemetry.pressure || 0).toFixed(2)),
+        pi2: supabaseTelemetry.pressure_outlet !== undefined ? parseFloat(Number(supabaseTelemetry.pressure_outlet).toFixed(2)) : parseFloat((Number(supabaseTelemetry.pressure || 0) * 0.82).toFixed(2)),
+        pi3: supabaseTelemetry.pressure_inlet_2 !== undefined ? parseFloat(Number(supabaseTelemetry.pressure_inlet_2).toFixed(2)) : parseFloat((Number(supabaseTelemetry.pressure || 0) * 0.90).toFixed(2)),
+        pi4: supabaseTelemetry.pressure_outlet_2 !== undefined ? parseFloat(Number(supabaseTelemetry.pressure_outlet_2).toFixed(2)) : parseFloat((Number(supabaseTelemetry.pressure || 0) * 0.72).toFixed(2)),
+        fc1: parseFloat(Number(supabaseTelemetry.flow_rate || 0).toFixed(2)),
+        fc2: supabaseTelemetry.flow_rate_2 !== undefined ? parseFloat(Number(supabaseTelemetry.flow_rate_2).toFixed(2)) : parseFloat((Number(supabaseTelemetry.flow_rate || 0) * 1.15).toFixed(2)),
+        tc1Setpoint: supabaseControls?.target_temp || tc1Setpoint,
+        heater1Active: Boolean(supabaseControls?.heater_1_status ?? isHeaterOn),
+        heater2Active: Boolean(supabaseControls?.heater_2_status ?? isHeaterOn),
+        mode: (supabaseControls?.flow_mode === 'COUNTER' ? 'Counter-Current' : 'Co-Current') as any
       };
     }
-    return telemetryHistory[telemetryHistory.length - 1];
+
+    // 2. Ambil point valid terakhir dari telemetryHistory
+    const validHistory = telemetryHistory.filter(
+      (pt) => (pt.ti1 > 0 || pt.ti2 > 0 || pt.ti3 > 0 || pt.ti4 > 0 || pt.pi1 > 0)
+    );
+    if (validHistory.length > 0) {
+      return validHistory[validHistory.length - 1];
+    }
+
+    return {
+      timestamp: new Date().toLocaleTimeString('id-ID'),
+      ti1: 0,
+      ti2: 0,
+      ti3: 0,
+      ti4: 0,
+      ti5: 0,
+      ti6: 0,
+      pi1: 0,
+      pi2: 0,
+      pi3: 0,
+      pi4: 0,
+      fc1: 0,
+      fc2: 0,
+      tc1Setpoint: tc1Setpoint,
+      heater1Active: false,
+      heater2Active: false,
+      mode: operationMode
+    };
   }, [isHardwareOnline, telemetryHistory, supabaseTelemetry, supabaseControls, tc1Setpoint, operationMode]);
 
   const dualHeaterState = useMemo(() => {
@@ -1633,10 +1646,13 @@ export default function FluidHEDashboard() {
       return;
     }
 
-    // Filter data hari ini agar riwayat telemetri akurat sesuai sesi berjalan
+    // Filter data hari ini agar riwayat telemetri akurat sesuai sesi berjalan dan bebas dari sinyal dummy
     const latestRow = streamToUse[streamToUse.length - 1];
     const latestDateStr = latestRow.created_at ? new Date(latestRow.created_at).toDateString() : new Date().toDateString();
     const filteredStream = streamToUse.filter((row) => {
+      const ws = String(row.warning_status || '');
+      if (ws.startsWith('CCTV_URL:') || ws.startsWith('PTZ_CMD:')) return false;
+      if (row.temp_1 === 0 && row.temp_2 === 0 && row.temp_3 === 0 && row.temp_4 === 0 && row.pressure === 0 && ws !== 'NORMAL') return false;
       if (!row.created_at) return true;
       return new Date(row.created_at).toDateString() === latestDateStr;
     });
